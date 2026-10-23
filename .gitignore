@@ -1,0 +1,8 @@
+# Quartus build output (regenerated on every compile)
+db/
+incremental_db/
+output_files/
+greybox_tmp/
+simulation/
+*.qws
+*.bak
