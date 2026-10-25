@@ -119,6 +119,14 @@ reg flag2;
 // Just so I can see the address being calculated
 assign LEDR = idx_location;
 
+parameter WALL1_X_POS = 10'd25;
+parameter WALL1_Y_POS = 10'd75;
+parameter WALL1_SIZE = 10'd30;
+reg[9:0] draw_wall1x;
+reg[9:0] draw_wall1y;
+
+
+
 reg[9:0] square_x_pos = 10'd50; //starting x pos (top left corner)
 reg[9:0] square_y_pos = 10'd50; //starting y pos (top left corner)
 parameter SQUARE_SIZE = 10'd10; //dimensions (10'd20 = 20x20). can't be bigger than the resolution
@@ -126,16 +134,17 @@ reg[9:0] draw_x;
 reg[9:0] draw_y;
 reg [1:0] direction; // key3 L, key2 U, key1 D, key0 R
 
-reg [2:0]S;
-reg [2:0]NS;
-parameter START = 3'b000,
-				CLEAR = 3'b001,
-				WAIT = 3'b010,
-				SYNC_LOW = 3'b011, //prevents white flashes while moving, waits for the screen to stop scanning before drawing the next frame
-				ERASE = 3'b100,
-				MOVE = 3'b101,
-				COLOR = 3'b110,
-				SYNC_HIGH = 3'b111; //waits for screen to start scanning
+reg [3:0]S;
+reg [3:0]NS;
+parameter START = 4'b0000,
+				CLEAR = 4'b0001,
+				WAIT = 4'b0010,
+				SYNC_LOW = 4'b0011, //prevents white flashes while moving, waits for the screen to stop scanning before drawing the next frame
+				ERASE = 4'b0100,
+				MOVE = 4'b0101,
+				COLOR = 4'b0110,
+				DRAW_WALL = 4'b0111,
+				SYNC_HIGH = 4'b1000; //waits for screen to start scanning
 				
 always @(posedge clk or negedge rst)
 begin	
@@ -144,7 +153,7 @@ begin
 	else
 		S <= NS;
 end 	
-
+	
 always @(*)
 	begin
 		case(S)
@@ -184,9 +193,16 @@ always @(*)
 			COLOR: 
 				begin
 					if ((draw_x == SQUARE_SIZE - 1) && (draw_y == SQUARE_SIZE - 1)) //once the new location is painted white, move on
-						NS = SYNC_HIGH;
+						NS = DRAW_WALL;
 					else
 						NS = COLOR;
+				end
+			DRAW_WALL:
+				begin 
+					if ((draw_x == WALL1_SIZE - 1) && (draw_y == WALL1_SIZE - 1))
+						NS = SYNC_HIGH;
+					else
+						NS = DRAW_WALL;
 				end
 			SYNC_HIGH:
 				begin
@@ -211,8 +227,13 @@ begin
 			draw_y <= 10'd0;
 			idx_location <= 15'd0;
 			
+			draw_wall1x <= 10'd0;
+			draw_wall1y <= 10'd0;
+			
 			square_x_pos <= (VIRTUAL_PIXEL_WIDTH / 2) - (SQUARE_SIZE / 2); //starting position (reads via top left corner of box)
 			square_y_pos <= (VIRTUAL_PIXEL_HEIGHT / 2) - (SQUARE_SIZE / 2); // same for y
+			
+	
 		end
 		else
 		begin
@@ -221,6 +242,8 @@ begin
 					begin	
 					idx_location <= 15'd0; //resets values
 					the_vga_draw_frame_write_a_pixel <= 1'b0;
+					draw_wall1x <= 10'd1;
+					draw_wall1y <= 10'd1;
 					end
 				CLEAR:
 					begin
@@ -292,6 +315,24 @@ begin
 							draw_x <= 10'd0;
 							if(draw_y < SQUARE_SIZE - 1)
 								draw_y <= draw_y + 1'b1;
+						end
+					end
+				DRAW_WALL: 
+					begin
+					
+						the_vga_draw_frame_write_mem_address <= ((WALL1_X_POS + draw_x) * VIRTUAL_PIXEL_HEIGHT) + (WALL1_Y_POS + draw_y); 
+						the_vga_draw_frame_write_mem_data <= 24'hFF0000; // red wall
+						the_vga_draw_frame_write_a_pixel <= 1'b1; 
+        				
+						if(draw_x < WALL1_SIZE - 1)
+							draw_x <= draw_x + 1'b1; 
+						else
+						begin
+							draw_x <= 10'd0;
+						if(draw_y < WALL1_SIZE - 1)
+							draw_y <= draw_y + 1'b1;
+						else
+							draw_y <= 10'd0; // resets so it moves on to sync high cleanly
 						end
 					end
 				SYNC_HIGH:
