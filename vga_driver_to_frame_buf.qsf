@@ -887,6 +887,7 @@ set_instance_assignment -name PACKAGE_SKEW_COMPENSATION OFF -to HPS_DDR3_CK_P
 set_instance_assignment -name PACKAGE_SKEW_COMPENSATION OFF -to HPS_DDR3_CK_N
 
 
+set_global_assignment -name VERILOG_FILE tilemap_rom.v
 set_global_assignment -name VERILOG_FILE vga_frame_driver.v
 set_global_assignment -name VERILOG_FILE vga_frame.v
 set_global_assignment -name VERILOG_FILE debounce.v

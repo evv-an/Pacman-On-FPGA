@@ -83,20 +83,6 @@ vga_frame_driver my_frame_driver(
 );
 
 reg [15:0]i;
-//reg [7:0]S;
-//reg [7:0]NS;
-//parameter 
-//	START 			= 8'd0,
-//	// W2M is write to memory
-//	W2M_INIT 		= 8'd1,
-//	W2M_COND 		= 8'd2,
-//	W2M_INC 			= 8'd3,
-//	W2M_DONE 		= 8'd4,
-// The RFM = READ_FROM_MEMORY reading cycles
-//	RFM_INIT_START = 8'd5,
-//	RFM_INIT_WAIT 	= 8'd6,
-//	RFM_DRAWING 	= 8'd7,
-//	ERROR 			= 8'hFF;
 
 parameter MEMORY_SIZE = 16'd19200; // 160*120 // Number of memory spots ... highly reduced since memory is slow
 parameter PIXEL_VIRTUAL_SIZE = 16'd4; // Pixels per spot - therefore 4x4 pixels are drawn per memory location
@@ -119,17 +105,55 @@ reg flag2;
 // Just so I can see the address being calculated
 assign LEDR = idx_location;
 
-parameter WALL1_X_POS = 10'd25;
-parameter WALL1_Y_POS = 10'd75;
-parameter WALL1_SIZE = 10'd30;
-reg[9:0] draw_wall1x;
-reg[9:0] draw_wall1y;
+wire [4:0] next_tile_x_left   = (square_x_pos - 1'b1) >> 3;
+wire [4:0] next_tile_x_right  = (square_x_pos + SQUARE_SIZE) >> 3;
+wire [3:0] next_tile_y_top    = (square_y_pos - 1'b1) >> 3;
+wire [3:0] next_tile_y_bottom = (square_y_pos + SQUARE_SIZE) >> 3;
+
+wire [4:0] curr_tile_x_left   = square_x_pos >> 3;
+wire [4:0] curr_tile_x_right  = (square_x_pos + SQUARE_SIZE - 1'b1) >> 3;
+wire [3:0] curr_tile_y_top    = square_y_pos >> 3;
+wire [3:0] curr_tile_y_bottom = (square_y_pos + SQUARE_SIZE - 1'b1) >> 3;
 
 
 
-reg[9:0] square_x_pos = 10'd50; //starting x pos (top left corner)
-reg[9:0] square_y_pos = 10'd50; //starting y pos (top left corner)
-parameter SQUARE_SIZE = 10'd10; //dimensions (10'd20 = 20x20). can't be bigger than the resolution
+wire wall_above, wall_below, wall_left, wall_right;
+
+wire w_up_l, w_up_r;
+tilemap_rom tile_up_l (.tile_x(curr_tile_x_left),  .tile_y(next_tile_y_top), .is_wall(w_up_l));
+tilemap_rom tile_up_r (.tile_x(curr_tile_x_right), .tile_y(next_tile_y_top), .is_wall(w_up_r));
+assign wall_above = w_up_l | w_up_r;
+
+wire w_dn_l, w_dn_r;
+tilemap_rom tile_dn_l (.tile_x(curr_tile_x_left),  .tile_y(next_tile_y_bottom), .is_wall(w_dn_l));
+tilemap_rom tile_dn_r (.tile_x(curr_tile_x_right), .tile_y(next_tile_y_bottom), .is_wall(w_dn_r)); //instantiating tile readings from
+assign wall_below = w_dn_l | w_dn_r;
+
+wire w_lt_t, w_lt_b;
+tilemap_rom tile_lt_t (.tile_x(next_tile_x_left), .tile_y(curr_tile_y_top),    .is_wall(w_lt_t)); // tilemap_rom.v for current & next tile data
+tilemap_rom tile_lt_b (.tile_x(next_tile_x_left), .tile_y(curr_tile_y_bottom), .is_wall(w_lt_b));
+assign wall_left = w_lt_t | w_lt_b;
+
+wire w_rt_t, w_rt_b;
+tilemap_rom tile_rt_t (.tile_x(next_tile_x_right), .tile_y(curr_tile_y_top),    .is_wall(w_rt_t));
+tilemap_rom tile_rt_b (.tile_x(next_tile_x_right), .tile_y(curr_tile_y_bottom), .is_wall(w_rt_b));
+assign wall_right = w_rt_t | w_rt_b;
+
+
+
+reg [4:0] tile_x_idx; // 0 to 19
+reg [3:0] tile_y_idx; // 0 to 14
+wire is_draw_wall;
+
+tilemap_rom map_render (
+    .tile_x(tile_x_idx),
+    .tile_y(tile_y_idx),
+    .is_wall(is_draw_wall)
+);
+
+reg[9:0] square_x_pos = 10'd136; //starting x pos (top left corner)
+reg[9:0] square_y_pos = 10'd56; //starting y pos (top left corner)
+parameter SQUARE_SIZE = 10'd8; //dimensions (10'd20 = 20x20). can't be bigger than the resolution
 reg[9:0] draw_x;
 reg[9:0] draw_y;
 reg [1:0] direction; // key3 L, key2 U, key1 D, key0 R
@@ -162,7 +186,7 @@ always @(*)
 			CLEAR:
 				begin
 					if(idx_location == 15'd19199) // # of pixels on screen [19199:0]
-						NS = COLOR;
+						NS = DRAW_WALL;
 					else
 						NS = CLEAR;
 				end
@@ -189,18 +213,18 @@ always @(*)
 					else
 						NS = ERASE;
 				end
-			MOVE: NS = COLOR;
+			MOVE: NS = DRAW_WALL;
 			COLOR: 
 				begin
 					if ((draw_x == SQUARE_SIZE - 1) && (draw_y == SQUARE_SIZE - 1)) //once the new location is painted white, move on
-						NS = DRAW_WALL;
+						NS = SYNC_HIGH;
 					else
 						NS = COLOR;
 				end
 			DRAW_WALL:
 				begin 
-					if ((draw_x == WALL1_SIZE - 1) && (draw_y == WALL1_SIZE - 1))
-						NS = SYNC_HIGH;
+					if ((draw_x == 10'd7) && (draw_y == 10'd7) && (tile_x_idx == 5'd19) && (tile_y_idx == 4'd14))
+						NS = COLOR;
 					else
 						NS = DRAW_WALL;
 				end
@@ -227,11 +251,11 @@ begin
 			draw_y <= 10'd0;
 			idx_location <= 15'd0;
 			
-			draw_wall1x <= 10'd0;
-			draw_wall1y <= 10'd0;
+			square_x_pos <= 10'd136;
+			square_y_pos <= 10'd56; 
 			
-			square_x_pos <= (VIRTUAL_PIXEL_WIDTH / 2) - (SQUARE_SIZE / 2); //starting position (reads via top left corner of box)
-			square_y_pos <= (VIRTUAL_PIXEL_HEIGHT / 2) - (SQUARE_SIZE / 2); // same for y
+			tile_x_idx <= 5'd0;
+			tile_y_idx <= 4'd0;
 			
 	
 		end
@@ -242,8 +266,6 @@ begin
 					begin	
 					idx_location <= 15'd0; //resets values
 					the_vga_draw_frame_write_a_pixel <= 1'b0;
-					draw_wall1x <= 10'd1;
-					draw_wall1y <= 10'd1;
 					end
 				CLEAR:
 					begin
@@ -291,16 +313,18 @@ begin
 						draw_x <= 10'd0;
 						draw_y <= 10'd0;
 						the_vga_draw_frame_write_a_pixel <= 1'b0; //resets values
+						tile_x_idx <= 5'd0;
+						tile_y_idx <= 4'd0;
 						
 						case(direction)
-							2'b00: if(square_y_pos > 0)
+							2'b00: if((square_y_pos > 0) && !wall_above)
 										square_y_pos <= (square_y_pos - 1'b1);
-							2'b01: if((square_y_pos + SQUARE_SIZE) < (VIRTUAL_PIXEL_HEIGHT - 1'b1)) //determines direction of movement
+							2'b01: if(((square_y_pos + SQUARE_SIZE) < (VIRTUAL_PIXEL_HEIGHT - 1'b1)) && !wall_below) //determines direction of movement
 										square_y_pos <= (square_y_pos + 1'b1);
-							2'b10: if(square_x_pos > 0)
+							2'b10: if((square_x_pos > 0) && !wall_left)
 										square_x_pos <= (square_x_pos - 1'b1);
-							2'b11: if((square_x_pos + SQUARE_SIZE) < (VIRTUAL_PIXEL_WIDTH - 1'b1)) //2'b00 and 2'b10 are longer because they are the
-										square_x_pos <= (square_x_pos + 1'b1);                        //sides that DONT directly touch the borders (top left corner)
+							2'b11: if(((square_x_pos + SQUARE_SIZE) < (VIRTUAL_PIXEL_WIDTH - 1'b1)) && !wall_right) //2'b00 and 2'b10 are longer because they are the
+										square_x_pos <= (square_x_pos + 1'b1);                       					  //sides that DONT directly touch the borders (top left corner)
 						endcase
 					end
 				COLOR: 
@@ -319,21 +343,39 @@ begin
 					end
 				DRAW_WALL: 
 					begin
-					
-						the_vga_draw_frame_write_mem_address <= ((WALL1_X_POS + draw_x) * VIRTUAL_PIXEL_HEIGHT) + (WALL1_Y_POS + draw_y); 
-						the_vga_draw_frame_write_mem_data <= 24'hFF0000; // red wall
-						the_vga_draw_frame_write_a_pixel <= 1'b1; 
-        				
-						if(draw_x < WALL1_SIZE - 1)
-							draw_x <= draw_x + 1'b1; 
-						else
-						begin
-							draw_x <= 10'd0;
-						if(draw_y < WALL1_SIZE - 1)
-							draw_y <= draw_y + 1'b1;
-						else
-							draw_y <= 10'd0; // resets so it moves on to sync high cleanly
-						end
+						 the_vga_draw_frame_write_mem_address <= (({11'd0, tile_x_idx} * 16'd8 + {6'd0, draw_x}) * VIRTUAL_PIXEL_HEIGHT) + ({12'd0, tile_y_idx} * 16'd8 + {6'd0, draw_y});				  
+						 the_vga_draw_frame_write_mem_data <= is_draw_wall ? 24'h0000FF : 24'h000000;  //pulls address and draws respective color to tile
+						 the_vga_draw_frame_write_a_pixel <= 1'b1; 
+						
+						if (draw_x < 10'd7) begin
+							  draw_x <= draw_x + 1'b1;  // sweeps pixels of each tile x0-x7
+						 end 
+						 else begin
+							  draw_x <= 10'd0;
+							  
+							  if (draw_y < 10'd7) begin
+									draw_y <= draw_y + 1'b1; // sweeps pixels of each tile y0-y7
+							  end 
+							  else begin
+									draw_y <= 10'd0;
+									
+									if (tile_x_idx < 5'd19) begin
+										 tile_x_idx <= tile_x_idx + 1'b1; // sweeps tile x across screen 0-19
+									end 
+									else begin
+										 tile_x_idx <= 5'd0;
+										 
+										 if (tile_y_idx < 4'd14) begin
+											  tile_y_idx <= tile_y_idx + 1'b1; // sweeps tile y down the screen 0-14
+										 end 
+										 else begin
+											  tile_y_idx <= 4'd0;
+											  draw_x <= 10'd0;
+											  draw_y <= 10'd0;
+										 end
+									end
+							  end
+						 end
 					end
 				SYNC_HIGH:
                 begin
