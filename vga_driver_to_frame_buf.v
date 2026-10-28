@@ -115,6 +115,14 @@ wire [4:0] curr_tile_x_right  = (square_x_pos + SQUARE_SIZE - 1'b1) >> 3;
 wire [3:0] curr_tile_y_top    = square_y_pos >> 3;
 wire [3:0] curr_tile_y_bottom = (square_y_pos + SQUARE_SIZE - 1'b1) >> 3;
 
+wire is_top_border    = (draw_y == 10'd0) && !wall_above_render;
+wire is_bottom_border = (draw_y == 10'd7) && !wall_below_render;
+wire is_left_border   = (draw_x == 10'd0) && !wall_left_render;
+wire is_right_border  = (draw_x == 10'd7) && !wall_right_render;
+wire is_wall_border = is_draw_wall && (is_top_border || is_bottom_border || is_left_border || is_right_border);
+					
+wire is_corner = ((draw_x == 10'd0 || draw_x == 10'd7) && (draw_y == 10'd0 || draw_y == 10'd7));
+
 
 
 wire wall_above, wall_below, wall_left, wall_right;
@@ -151,6 +159,32 @@ tilemap_rom map_render (
     .is_wall(is_draw_wall)
 );
 
+						wire wall_above_render, wall_below_render, wall_left_render, wall_right_render;
+
+						tilemap_rom map_up (
+							 .tile_x(tile_x_idx),
+							 .tile_y((tile_y_idx > 0) ? (tile_y_idx - 1'b1) : 4'd0),
+							 .is_wall(wall_above_render)
+						);
+
+						tilemap_rom map_dn (
+							 .tile_x(tile_x_idx),
+							 .tile_y((tile_y_idx < 4'd14) ? (tile_y_idx + 1'b1) : 4'd14),
+							 .is_wall(wall_below_render)
+						);
+
+						tilemap_rom map_lt (
+							 .tile_x((tile_x_idx > 0) ? (tile_x_idx - 1'b1) : 5'd0),
+							 .tile_y(tile_y_idx),
+							 .is_wall(wall_left_render)
+						);
+
+						tilemap_rom map_rt (
+							 .tile_x((tile_x_idx < 5'd19) ? (tile_x_idx + 1'b1) : 5'd19),
+							 .tile_y(tile_y_idx),
+							 .is_wall(wall_right_render)
+						);
+
 reg[9:0] square_x_pos;
 reg[9:0] square_y_pos;
 parameter SQUARE_SIZE = 10'd8; //dimensions (10'd20 = 20x20). can't be bigger than the resolution
@@ -161,7 +195,7 @@ reg[9:0] draw_y;
 reg [1:0] direction; // key3 L, key2 U, key1 D, key0 R
 reg started;
 
-//reg[3:0] move_divider;
+
 
 reg [3:0]S;
 reg [3:0]NS;
@@ -374,7 +408,7 @@ begin
 				DRAW_WALL: 
 					begin
 						 the_vga_draw_frame_write_mem_address <= (({11'd0, tile_x_idx} * 16'd8 + {6'd0, draw_x}) * VIRTUAL_PIXEL_HEIGHT) + ({12'd0, tile_y_idx} * 16'd8 + {6'd0, draw_y});				  
-						 the_vga_draw_frame_write_mem_data <= is_draw_wall ? 24'h0000FF : 24'h000000;  //pulls address and draws respective color to tile
+						 the_vga_draw_frame_write_mem_data <= is_wall_border ? 24'h0000FF : 24'h000000;  //pulls address and draws respective color to tile
 						 the_vga_draw_frame_write_a_pixel <= 1'b1; 
 						
 						if (draw_x < 10'd7) begin
