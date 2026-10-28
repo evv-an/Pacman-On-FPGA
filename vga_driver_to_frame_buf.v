@@ -105,9 +105,9 @@ reg flag2;
 // Just so I can see the address being calculated
 assign LEDR = idx_location;
 
-wire [4:0] next_tile_x_left   = (square_x_pos - 1'b1) >> 3;
+wire [4:0] next_tile_x_left   = (square_x_pos > 0) ? ((square_x_pos - 1'b1) >> 3) : 5'd0;
 wire [4:0] next_tile_x_right  = (square_x_pos + SQUARE_SIZE) >> 3;
-wire [3:0] next_tile_y_top    = (square_y_pos - 1'b1) >> 3;
+wire [3:0] next_tile_y_top    = (square_y_pos > 0) ? ((square_y_pos - 1'b1) >> 3) : 4'd0;
 wire [3:0] next_tile_y_bottom = (square_y_pos + SQUARE_SIZE) >> 3;
 
 wire [4:0] curr_tile_x_left   = square_x_pos >> 3;
@@ -151,15 +151,21 @@ tilemap_rom map_render (
     .is_wall(is_draw_wall)
 );
 
-reg[9:0] square_x_pos = 10'd136; //starting x pos (top left corner)
-reg[9:0] square_y_pos = 10'd56; //starting y pos (top left corner)
+reg[9:0] square_x_pos;
+reg[9:0] square_y_pos;
 parameter SQUARE_SIZE = 10'd8; //dimensions (10'd20 = 20x20). can't be bigger than the resolution
+
 reg[9:0] draw_x;
 reg[9:0] draw_y;
+
 reg [1:0] direction; // key3 L, key2 U, key1 D, key0 R
+reg started;
+
+//reg[3:0] move_divider;
 
 reg [3:0]S;
 reg [3:0]NS;
+
 parameter START = 4'b0000,
 				CLEAR = 4'b0001,
 				WAIT = 4'b0010,
@@ -169,6 +175,32 @@ parameter START = 4'b0000,
 				COLOR = 4'b0110,
 				DRAW_WALL = 4'b0111,
 				SYNC_HIGH = 4'b1000; //waits for screen to start scanning
+
+always @(posedge clk or negedge rst) 
+		if (!rst) 
+			begin
+				direction <= 2'b11;			// key latching logic. Makes movement continuous so no need to hold a key
+				started <= 1'b0;
+			end
+		else
+			begin
+				if (KEY[2] == 1'b0) begin //up								//nested if statements to protect movement from stopping
+					started <= 1'b1;												//if pressed keys direction is not a playable tile
+					if (!wall_above)
+						direction <= 2'b00; end
+				else if (KEY[1] == 1'b0) begin //down
+					started <= 1'b1;
+					if (!wall_below)
+						direction <= 2'b01; end
+				else if (KEY[3] == 1'b0) begin //left
+					started <= 1'b1;
+					if (!wall_left)
+						direction <= 2'b10; end
+				else if (KEY[0] == 1'b0) begin //right
+					started <= 1'b1;
+					if (!wall_right)
+						direction <= 2'b11; end
+			end
 				
 always @(posedge clk or negedge rst)
 begin	
@@ -177,7 +209,11 @@ begin
 	else
 		S <= NS;
 end 	
+
+
+
 	
+
 always @(*)
 	begin
 		case(S)
@@ -191,14 +227,8 @@ always @(*)
 						NS = CLEAR;
 				end
 			
-			WAIT:
-				begin
-					if (KEY[3:0] != 4'b1111) //if any key is pressed, goes to sync low so the box doesn't glitch
-						NS = SYNC_LOW;
-					else
-						NS = WAIT;
-				end
-				
+			WAIT:	NS = SYNC_LOW;
+			
 			SYNC_LOW: 
 				begin
 					if(VGA_VS == 1'b0) //waits for vertical sync
@@ -257,6 +287,8 @@ begin
 			tile_x_idx <= 5'd0;
 			tile_y_idx <= 4'd0;
 			
+			//move_divider <= 4'd0;
+			
 	
 		end
 		else
@@ -279,15 +311,6 @@ begin
 						the_vga_draw_frame_write_a_pixel <= 1'b0; //resets while waiting so stages don't overlap
 						draw_x <= 10'd0;
 						draw_y <= 10'd0;
-					
-					if(KEY[2] == 1'b0)
-						direction <= 2'b00; //up
-					else if(KEY[1] == 1'b0)
-						direction <= 2'b01; //down       // key a being pressed --> moving in direction a, etc.
-					else if(KEY[3] == 1'b0)
-						direction <= 2'b10; //left
-					else if(KEY[0] == 1'b0)
-						direction <= 2'b11; //right
 					end
 				SYNC_LOW:
 					begin
@@ -315,17 +338,24 @@ begin
 						the_vga_draw_frame_write_a_pixel <= 1'b0; //resets values
 						tile_x_idx <= 5'd0;
 						tile_y_idx <= 4'd0;
-						
-						case(direction)
-							2'b00: if((square_y_pos > 0) && !wall_above)
-										square_y_pos <= (square_y_pos - 1'b1);
-							2'b01: if(((square_y_pos + SQUARE_SIZE) < (VIRTUAL_PIXEL_HEIGHT - 1'b1)) && !wall_below) //determines direction of movement
-										square_y_pos <= (square_y_pos + 1'b1);
-							2'b10: if((square_x_pos > 0) && !wall_left)
-										square_x_pos <= (square_x_pos - 1'b1);
-							2'b11: if(((square_x_pos + SQUARE_SIZE) < (VIRTUAL_PIXEL_WIDTH - 1'b1)) && !wall_right) //2'b00 and 2'b10 are longer because they are the
-										square_x_pos <= (square_x_pos + 1'b1);                       					  //sides that DONT directly touch the borders (top left corner)
-						endcase
+									 
+						if (started) begin
+							case(direction)
+								2'b00: if((square_y_pos > 0) && !wall_above)
+											square_y_pos <= (square_y_pos - 1'b1);
+								2'b01: if(((square_y_pos + SQUARE_SIZE) < (VIRTUAL_PIXEL_HEIGHT - 1'b1)) && !wall_below) //determines direction of movement
+											square_y_pos <= (square_y_pos + 1'b1);
+								2'b10: if((square_x_pos > 0) && !wall_left)
+											square_x_pos <= (square_x_pos - 1'b1);
+								2'b11: if(((square_x_pos + SQUARE_SIZE) < (VIRTUAL_PIXEL_WIDTH - 1'b1)) && !wall_right) //2'b00 and 2'b10 are longer because they are the
+											square_x_pos <= (square_x_pos + 1'b1);                       					    //sides that DONT directly touch the borders (top left corner)
+							endcase
+						if (square_y_pos == 1'b0) begin
+							square_y_pos <= (VIRTUAL_PIXEL_HEIGHT - SQUARE_SIZE - 2'b10); end
+						else if (square_y_pos == (VIRTUAL_PIXEL_HEIGHT - SQUARE_SIZE - 1'b1)) begin
+							square_y_pos <= 1'b1; end
+							
+						end
 					end
 				COLOR: 
 					begin
