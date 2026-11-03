@@ -1,6 +1,6 @@
 module tilemap_rom (
-    input  [4:0] tile_x, // 0 to 19 (Columns)
-    input  [3:0] tile_y, // 0 to 14 (Rows)
+    input  [4:0] tile_x, // 0 to 19
+    input  [3:0] tile_y, // 0 to 14
     output reg is_wall
 );
 

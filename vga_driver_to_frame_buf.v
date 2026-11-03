@@ -14,10 +14,11 @@ module vga_driver_to_frame_buf(
 	input CLOCK_50,
 	input [9:0]SW,		// sw9 is on/off switch													
 	output VGA_SYNC_N,														
-	output VGA_VS);
+	output VGA_VS,
+	output reg [8:0]pellets_eaten); //counts pellets eaten for score display
 
 
-// turns off all displays
+
 assign	HEX0 =	7'h00;
 assign	HEX1 =	7'h00;
 assign	HEX2 =	7'h00;
@@ -102,32 +103,54 @@ wire is_bottom_border = (draw_y == 10'd7) && !wall_below_render;
 wire is_left_border   = (draw_x == 10'd0) && !wall_left_render;
 wire is_right_border  = (draw_x == 10'd7) && !wall_right_render;
 wire is_wall_border = is_draw_wall && (is_top_border || is_bottom_border || is_left_border || is_right_border);
-					
+
 wire is_corner = ((draw_x == 10'd0 || draw_x == 10'd7) && (draw_y == 10'd0 || draw_y == 10'd7));
 
 // pacman sprite drawing
-wire is_pacman_pixel;
-reg [5:0] pacman_addr;
 wire[23:0] pacman_color;
 
-pacmansprite pacman_sprite(
-    .address(pacman_addr),
-    .clock(clk),
-	 .data(24'd0),
-	 .wren(1'b0),
-    .q(pacman_color));
-
-always @(*) begin
-    case (direction)
-        2'b11: pacman_addr = {draw_y[2:0], draw_x[2:0] - 3'd1};          //right 
-        2'b10: pacman_addr = {draw_y[2:0], 3'd7 - (draw_x[2:0] - 3'd1)};     //left
-        2'b00: pacman_addr = {3'd7 - (draw_x[2:0] - 3'd1), draw_y[2:0]};    //up
-        2'b01: pacman_addr = {draw_x[2:0] - 3'd1, draw_y[2:0]};           //down
-        default: pacman_addr = {draw_y[2:0], 3'd7 - (draw_x[2:0] - 3'd1)};  //defaulted to left
-    endcase
-end
-
+pacman_sprite pacman_render(
+    .draw_x(draw_x[2:0]),
+    .draw_y(draw_y[2:0]),
+    .direction(direction),
+    .color(pacman_color));
 	
+	
+	
+	
+	
+	
+//pellet system logic & registers 
+
+//pellet system logic & registers 
+
+reg[299:0] eaten_pellet;
+
+wire[4:0] pacman_center_tile_x = (square_x_pos + 10'd4) >> 3; //knows when pacman hits center of tile
+wire[3:0] pacman_center_tile_y = (square_y_pos + 10'd4) >> 3; 
+
+wire[8:0] eat_idx = (pacman_center_tile_y * 5'd20) + (5'd19 - pacman_center_tile_x); //tracks pacman tile index for eating while moving
+wire[8:0] draw_idx = (tile_y_idx * 5'd20) + (5'd19 - tile_x_idx);							 //tracks tile index being scanned by vga renderer
+
+
+//game logic: locations pellets cannot spawn (ranges of tiles)
+wire warp_hallway = (pacman_center_tile_x == 5'd9) && (pacman_center_tile_y <= 4'd1 || pacman_center_tile_y >= 4'd13);
+wire ghost_cage = (pacman_center_tile_x >= 5'd6 && pacman_center_tile_x <= 5'd13) && (pacman_center_tile_y >= 4'd4 && pacman_center_tile_y <= 4'd10);
+wire spawn_tile = (pacman_center_tile_x == 5'd16) && (pacman_center_tile_y == 4'd7);
+wire no_pellet = warp_hallway || ghost_cage || spawn_tile;
+
+//vga logic: locations pellets cannot spawn (ranges of tiles)
+wire draw_is_warp_hallway = (tile_x_idx == 5'd9) && (tile_y_idx <= 4'd1 || tile_y_idx >= 4'd13);
+wire draw_is_ghost_cage = (tile_x_idx >= 5'd6 && tile_x_idx <= 5'd13) && (tile_y_idx >= 4'd4 && tile_y_idx <= 4'd10);
+wire draw_is_spawn_tile = (tile_x_idx == 5'd16) && (tile_y_idx == 4'd7);
+wire draw_no_pellet = draw_is_warp_hallway || draw_is_ghost_cage || draw_is_spawn_tile;
+
+wire is_pellet_center = (draw_x >= 10'd3 && draw_x <= 10'd4) && (draw_y >= 10'd3 && draw_y <= 10'd4); //pellet 2x2 dot in center of tile
+wire is_pellet_eaten = eaten_pellet[draw_idx]; //checks if pellet is already eaten
+wire draw_pellet = !is_draw_wall && !draw_no_pellet && !is_pellet_eaten && is_pellet_center;
+
+
+
 wire wall_above;
 wire wall_below;
 wire wall_left;
@@ -254,7 +277,7 @@ parameter START = 4'b0000,
 always @(posedge clk or negedge rst) 
 		if (!rst) 
 			begin
-				direction <= 2'b11;	// key latching logic. makes movement continuous so no need to hold a key
+				direction <= 2'b00;	// key latching logic. makes movement continuous so no need to hold a key
 				started <= 1'b0;
 			end
 		else
@@ -363,11 +386,15 @@ begin
 		draw_y <= 10'd0;
 		idx_location <= 15'd0;
 			
-		square_x_pos <= 10'd136;
+		square_x_pos <= 10'd128;
 		square_y_pos <= 10'd56; 
 			
 		tile_x_idx <= 5'd0;
 		tile_y_idx <= 4'd0;
+		
+		eaten_pellet <= 300'd0;
+		pellets_eaten <= 9'd0;
+		
 	end
 
 	else
@@ -382,10 +409,10 @@ begin
 			CLEAR:
 			begin
 				the_vga_draw_frame_write_mem_address <= idx_location; // paints pixels over black
-                     		the_vga_draw_frame_write_mem_data <= 24'h000000;   
-                     		the_vga_draw_frame_write_a_pixel <= 1'b1;
-                    		idx_location <= idx_location + 1'b1;
-                	end
+            the_vga_draw_frame_write_mem_data <= 24'h000000;   
+            the_vga_draw_frame_write_a_pixel <= 1'b1;
+            idx_location <= idx_location + 1'b1;
+         end
 
 			WAIT:
 			begin
@@ -423,6 +450,10 @@ begin
 				the_vga_draw_frame_write_a_pixel <= 1'b0;
 				tile_x_idx <= 5'd0;
 				tile_y_idx <= 4'd0;
+				
+				if(!eaten_pellet[eat_idx] && !no_pellet) begin
+					eaten_pellet[eat_idx] <= 1'b1;
+					pellets_eaten <= pellets_eaten + 1'b1; end
 									 
 				if (started) begin
 					case(direction)
@@ -440,9 +471,9 @@ begin
 								
 					endcase
 						if (square_y_pos == 1'b0) begin
-							square_y_pos <= (VIRTUAL_PIXEL_HEIGHT - SQUARE_SIZE - 2'b10); end
+								square_y_pos <= (VIRTUAL_PIXEL_HEIGHT - SQUARE_SIZE - 2'b10); end
 						else if (square_y_pos == (VIRTUAL_PIXEL_HEIGHT - SQUARE_SIZE - 1'b1)) begin
-							square_y_pos <= 1'b1; end
+								square_y_pos <= 1'b1; end
 							
 						end
 					end
@@ -465,7 +496,7 @@ begin
 			DRAW_WALL: 
 				begin
 					the_vga_draw_frame_write_mem_address <= (({11'd0, tile_x_idx} * 16'd8 + {6'd0, draw_x}) * VIRTUAL_PIXEL_HEIGHT) + ({12'd0, tile_y_idx} * 16'd8 + {6'd0, draw_y});				  
-					the_vga_draw_frame_write_mem_data <= is_wall_border ? 24'h0000FF : 24'h000000;  //pulls address and draws respective color to tile
+					the_vga_draw_frame_write_mem_data <= is_wall_border ? 24'h0000FF : (draw_pellet ? 24'hFFB8AE : 24'h000000);
 					the_vga_draw_frame_write_a_pixel <= 1'b1; 
 						
 					if (draw_x < 10'd7) begin
