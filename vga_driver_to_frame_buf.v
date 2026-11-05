@@ -12,17 +12,14 @@ module vga_driver_to_frame_buf(
 	output [9:0]LEDR,
 	input [3:0]KEY,         // key 3-0 is awsd directions
 	input CLOCK_50,
+	input [35:0]GPIO_0,
+	
 	input [9:0]SW,		// sw9 is on/off switch													
 	output VGA_SYNC_N,														
-	output VGA_VS,
-	output reg [8:0]pellets_eaten); //counts pellets eaten for score display
+	output VGA_VS);
 
 
 
-assign	HEX0 =	7'h00;
-assign	HEX1 =	7'h00;
-assign	HEX2 =	7'h00;
-assign	HEX3 =	7'h00;
 
 // circuit signals
 wire clk;
@@ -31,7 +28,7 @@ wire rst;
 assign clk = CLOCK_50;
 assign rst = SW[9];
 
-
+reg [12:0]pellets_eaten;
 // switch debouncer
 wire [9:0]SW_db;
 
@@ -84,6 +81,20 @@ parameter VGA_HEIGHT = 16'd480;
 parameter VIRTUAL_PIXEL_WIDTH = VGA_WIDTH/PIXEL_VIRTUAL_SIZE; // 160
 parameter VIRTUAL_PIXEL_HEIGHT = VGA_HEIGHT/PIXEL_VIRTUAL_SIZE; // 120
 
+//define tile for ghost gate and border drawing
+parameter GATE_TILE_X = 5'd8; 
+parameter GATE_TILE_Y = 4'd7; 
+parameter TILE_ABOVE_GATE_X = 5'd8;
+parameter TILE_ABOVE_GATE_Y = 4'd6;
+parameter TILE_BELOW_GATE_X = 5'd8;
+parameter TILE_BELOW_GATE_Y = 5'd8;
+
+wire is_gate_tile = (tile_x_idx == GATE_TILE_X) && (tile_y_idx == GATE_TILE_Y);
+wire is_gate_bar  = is_gate_tile && (draw_x == 10'd3 || draw_x == 10'd4); 
+wire above_gate = (tile_x_idx == TILE_ABOVE_GATE_X) && (tile_y_idx == TILE_ABOVE_GATE_Y);
+wire below_gate = (tile_x_idx == TILE_BELOW_GATE_X) && (tile_y_idx == TILE_BELOW_GATE_Y);
+
+
 reg [14:0] idx_location; // stores locations
 
 // checks current and next tile data (wall or path)
@@ -98,11 +109,11 @@ wire [3:0] curr_tile_y_top = pacman_y_pos >> 3;
 wire [3:0] curr_tile_y_bottom = (pacman_y_pos + PACMAN_SIZE - 1'b1) >> 3;
 
 // draws a line of blue on wall borders that are touching path
-wire is_top_border = (draw_y == 10'd0) && !wall_above_render;
-wire is_bottom_border = (draw_y == 10'd7) && !wall_below_render;
+wire is_top_border = ((draw_y == 10'd0) && !wall_above_render) || ((draw_y == 10'd0) && below_gate);
+wire is_bottom_border = ((draw_y == 10'd7) && !wall_below_render) || ((draw_y == 10'd7) && above_gate);
 wire is_left_border = (draw_x == 10'd0) && !wall_left_render;
 wire is_right_border = (draw_x == 10'd7) && !wall_right_render;
-wire is_wall_border = is_draw_wall && (is_top_border || is_bottom_border || is_left_border || is_right_border);
+wire is_wall_border = !is_gate_tile && (is_draw_wall && (is_top_border || is_bottom_border || is_left_border || is_right_border));
 
 wire is_corner = ((draw_x == 10'd0 || draw_x == 10'd7) && (draw_y == 10'd0 || draw_y == 10'd7));
 
@@ -364,6 +375,8 @@ reg[9:0] draw_y;
 reg [1:0] direction; // key3 left, key2 up, key1 down, key0 right
 reg started;
 
+reg pinky_release;
+
 // fsm state parameters
 reg [3:0]S;
 reg [3:0]NS;
@@ -379,7 +392,13 @@ parameter START = 4'b0000,
 			SYNC_HIGH = 4'b1000, //waits for screen to start scanning
 			COLOR_GHOST = 4'b1001;
 
-// key latching logic. makes movement continuous (no need to hold key)
+// key latching logic. makes movement continuous (no need to hold key) & joystick
+
+wire joy_up = KEY[2] && GPIO_0[0];
+wire joy_down = KEY[1] && GPIO_0[1];
+wire joy_left =  KEY[3] && GPIO_0[2];
+wire joy_right = KEY[0] && GPIO_0[3];
+
 always @(posedge clk or negedge rst) 
 		if (!rst) 
 			begin
@@ -388,19 +407,19 @@ always @(posedge clk or negedge rst)
 			end
 		else
 			begin
-				if (KEY[2] == 1'b0) begin //up		//nested if statements to protect movement from stopping
+				if (joy_up == 1'b0) begin //up		//nested if statements to protect movement from stopping
 					started <= 1'b1;		            //if pressed keys direction is not a playable tile
 					if (!wall_above)  		         
 						direction <= 2'b00; end
-				else if (KEY[1] == 1'b0) begin //down
+				else if (joy_down == 1'b0) begin //down
 					started <= 1'b1;
 					if (!wall_below)
 						direction <= 2'b01; end
-				else if (KEY[3] == 1'b0) begin //left
+				else if (joy_left == 1'b0) begin //left
 					started <= 1'b1;
 					if (!wall_left)
 						direction <= 2'b10; end
-				else if (KEY[0] == 1'b0) begin //right
+				else if (joy_right == 1'b0) begin //right
 					started <= 1'b1;
 					if (!wall_right)
 						direction <= 2'b11; end
@@ -512,7 +531,7 @@ begin
 		tile_y_idx <= 4'd0;
 		
 		eaten_pellet <= 300'd0;
-		pellets_eaten <= 9'd0;
+		pellets_eaten <= 13'd0;
 		
 	end
 
@@ -594,6 +613,14 @@ begin
 						else if (pacman_y_pos == (VIRTUAL_PIXEL_HEIGHT - PACMAN_SIZE - 1'b1)) begin
 								pacman_y_pos <= 1'b1; end
 						
+//						if (!pinky_released && (pellets_eaten >= 9'd10)) begin // releases pinky when 10 pellets have been eaten
+//								pinky_x_pos     <= 10'd56;
+//								pinky_y_pos     <= 10'd56;
+//								pinky_released  <= 1'b1;
+//						end
+//						else if (!pinky_released) begin
+//
+//						end // will need to add something here when pinky variables exist
 						
 						blinky_speed_counter <= blinky_speed_counter + 1'b1;
 						
@@ -652,7 +679,7 @@ begin
 			DRAW_WALL: 
 				begin
 					the_vga_draw_frame_write_mem_address <= (({11'd0, tile_x_idx} * 16'd8 + {6'd0, draw_x}) * VIRTUAL_PIXEL_HEIGHT) + ({12'd0, tile_y_idx} * 16'd8 + {6'd0, draw_y});				  
-					the_vga_draw_frame_write_mem_data <= is_wall_border ? 24'h0000FF : (draw_pellet ? 24'hFFB8AE : 24'h000000);
+					the_vga_draw_frame_write_mem_data <= is_gate_bar ? 24'hFFB8FF : (is_wall_border ? 24'h0000FF : (draw_pellet ? 24'hFFB8AE : 24'h000000));
 					the_vga_draw_frame_write_a_pixel <= 1'b1; 
 						
 					if (draw_x < 10'd7) begin
@@ -695,4 +722,6 @@ begin
 		endcase
 	end
 end
+
+three_decimal_vals_w_neg my_three_decimal_vals_w_neg(pellets_eaten, HEX3, HEX2, HEX1, HEX0);
 endmodule
