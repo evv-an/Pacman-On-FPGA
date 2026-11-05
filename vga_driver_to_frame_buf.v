@@ -12,8 +12,7 @@ module vga_driver_to_frame_buf(
 	output [9:0]LEDR,
 	input [3:0]KEY,         // key 3-0 is awsd directions
 	input CLOCK_50,
-	input [35:0]GPIO_0,
-	
+	input [35:0]GPIO_0,	// gpio for joystick->arduino->breadboard->fpga
 	input [9:0]SW,		// sw9 is on/off switch													
 	output VGA_SYNC_N,														
 	output VGA_VS);
@@ -28,7 +27,6 @@ wire rst;
 assign clk = CLOCK_50;
 assign rst = SW[9];
 
-reg [12:0]pellets_eaten;
 // switch debouncer
 wire [9:0]SW_db;
 
@@ -108,7 +106,7 @@ wire [4:0] curr_tile_x_right = (pacman_x_pos + PACMAN_SIZE - 1'b1) >> 3;
 wire [3:0] curr_tile_y_top = pacman_y_pos >> 3;
 wire [3:0] curr_tile_y_bottom = (pacman_y_pos + PACMAN_SIZE - 1'b1) >> 3;
 
-// draws a line of blue on wall borders that are touching path
+// draws a line of blue on wall borders that are touching path OR gate tile
 wire is_top_border = ((draw_y == 10'd0) && !wall_above_render) || ((draw_y == 10'd0) && below_gate);
 wire is_bottom_border = ((draw_y == 10'd7) && !wall_below_render) || ((draw_y == 10'd7) && above_gate);
 wire is_left_border = (draw_x == 10'd0) && !wall_left_render;
@@ -127,28 +125,11 @@ pacman_sprite pacman_render(
     .color(pacman_color));
 	
 	
-	
-	
-	
-	
-reg [9:0] blinky_x_pos;
-reg [9:0] blinky_y_pos;
-reg [1:0] blinky_dir;
-reg [1:0] blinky_speed_counter;
-
-wire[23:0] blinky_color;
-
-blinky_sprite blinky_render(
-    .draw_x(draw_x[2:0]),
-    .draw_y(draw_y[2:0]),
-    .direction(blinky_dir),
-    .color(blinky_color));
-
-	
 
 //pellet system logic & registers 
 
-reg[299:0] eaten_pellet;
+reg [299:0] eaten_pellet;
+reg [12:0] pellets_eaten;
 
 wire[4:0] pacman_center_tile_x = (pacman_x_pos + 10'd4) >> 3; //knows when pacman hits center of tile
 wire[3:0] pacman_center_tile_y = (pacman_y_pos + 10'd4) >> 3; 
@@ -235,100 +216,8 @@ tilemap_rom tile_rt_b(
 	.tile_y(curr_tile_y_bottom),
 	.is_wall(w_rt_b));
 
-// detects walls for blinky (red)
-wire [4:0] b_next_x_left = (blinky_x_pos > 0) ? ((blinky_x_pos - 1'b1) >> 3) : 5'd0;
-wire [4:0] b_next_x_right = (blinky_x_pos + PACMAN_SIZE) >> 3;
-wire [3:0] b_next_y_top = (blinky_y_pos > 0) ? ((blinky_y_pos - 1'b1) >> 3) : 4'd0;
-wire [3:0] b_next_y_bottom = (blinky_y_pos + PACMAN_SIZE) >> 3;
 
-wire [4:0] b_curr_x_left = blinky_x_pos >> 3;
-wire [4:0] b_curr_x_right = (blinky_x_pos + PACMAN_SIZE - 1'b1) >> 3;
-wire [3:0] b_curr_y_top = blinky_y_pos >> 3;
-wire [3:0] b_curr_y_bottom = (blinky_y_pos + PACMAN_SIZE - 1'b1) >> 3;
-
-wire b_w_up_l;
-wire b_w_up_r;
-wire b_w_dn_l;
-wire b_w_dn_r;
-wire b_w_lt_t;
-wire b_w_lt_b; 
-wire b_w_rt_t; 
-wire b_w_rt_b;
-
-tilemap_rom b_tile_up_l(
-	.tile_x(b_curr_x_left), 
-	.tile_y(b_next_y_top),   
-	.is_wall(b_w_up_l));
-	
-tilemap_rom b_tile_up_r(
-	.tile_x(b_curr_x_right), 
-	.tile_y(b_next_y_top),    
-	.is_wall(b_w_up_r));
-	
-tilemap_rom b_tile_dn_l(
-	.tile_x(b_curr_x_left),  
-	.tile_y(b_next_y_bottom), 
-	.is_wall(b_w_dn_l));
-	
-tilemap_rom b_tile_dn_r(
-	.tile_x(b_curr_x_right),
-	.tile_y(b_next_y_bottom), 
-	.is_wall(b_w_dn_r));
-	
-tilemap_rom b_tile_lt_t(
-	.tile_x(b_next_x_left),  
-	.tile_y(b_curr_y_top),    
-	.is_wall(b_w_lt_t));
-	
-tilemap_rom b_tile_lt_b(
-	.tile_x(b_next_x_left),  
-	.tile_y(b_curr_y_bottom), 
-	.is_wall(b_w_lt_b));
-	
-tilemap_rom b_tile_rt_t(
-	.tile_x(b_next_x_right), 
-	.tile_y(b_curr_y_top),    
-	.is_wall(b_w_rt_t));
-	
-tilemap_rom b_tile_rt_b(
-	.tile_x(b_next_x_right), 
-	.tile_y(b_curr_y_bottom),
-	.is_wall(b_w_rt_b));
-
-wire blinky_wall_above = b_w_up_l | b_w_up_r;
-wire blinky_wall_below = b_w_dn_l | b_w_dn_r;
-wire blinky_wall_left  = b_w_lt_t | b_w_lt_b;
-wire blinky_wall_right = b_w_rt_t | b_w_rt_b;
-
-
-// detects when blinky hits center of tile
-wire [4:0] blinky_tile_x = blinky_x_pos >> 3;
-wire [3:0] blinky_tile_y = blinky_y_pos >> 3;
-wire is_blinky_tile_center = (blinky_x_pos[2:0] == 3'd0) && (blinky_y_pos[2:0] == 3'd0); //calculates blinky center
-
-// blinky pathing algorithm - calculates distance from pacman for each direction
-wire [4:0] x_up = (blinky_tile_x > pacman_center_tile_x) ? (blinky_tile_x - pacman_center_tile_x) : (pacman_center_tile_x - blinky_tile_x);
-wire [4:0] x_down = x_up;
-wire [4:0] x_left = ((blinky_tile_x - 1'b1) > pacman_center_tile_x) ? ((blinky_tile_x - 1'b1) - pacman_center_tile_x) : (pacman_center_tile_x - (blinky_tile_x - 1'b1));
-wire [4:0] x_right = ((blinky_tile_x + 1'b1) > pacman_center_tile_x) ? ((blinky_tile_x + 1'b1) - pacman_center_tile_x) : (pacman_center_tile_x - (blinky_tile_x + 1'b1));
-
-wire [3:0] y_up = ((blinky_tile_y - 1'b1) > pacman_center_tile_y) ? ((blinky_tile_y - 1'b1) - pacman_center_tile_y) : (pacman_center_tile_y - (blinky_tile_y - 1'b1));
-wire [3:0] y_down = ((blinky_tile_y + 1'b1) > pacman_center_tile_y) ? ((blinky_tile_y + 1'b1) - pacman_center_tile_y) : (pacman_center_tile_y - (blinky_tile_y + 1'b1));
-wire [3:0] y_left = (blinky_tile_y > pacman_center_tile_y) ? (blinky_tile_y - pacman_center_tile_y) : (pacman_center_tile_y - blinky_tile_y);
-wire [3:0] y_right = y_left;
-
-wire [9:0] dist_up = (blinky_wall_above || blinky_dir == 2'b01 || blinky_tile_y == 4'd0)  ? 10'h3FF : (x_up * x_up + y_up * y_up);
-wire [9:0] dist_down = (blinky_wall_below || blinky_dir == 2'b00 || blinky_tile_y == 4'd14) ? 10'h3FF : (x_down * x_down + y_down * y_down);
-wire [9:0] dist_left = (blinky_wall_left  || blinky_dir == 2'b11 || blinky_tile_x == 5'd0)  ? 10'h3FF : (x_left * x_left + y_left * y_left);
-wire [9:0] dist_right = (blinky_wall_right || blinky_dir == 2'b10 || blinky_tile_x == 5'd19) ? 10'h3FF : (x_right * x_right + y_right * y_right);
-
-// direction hierarchy (up, left, down, right)
-wire [1:0] best_blinky_dir = (dist_up <= dist_left && dist_up <= dist_down && dist_up <= dist_right) ? 2'b00 :
-                             (dist_left <= dist_down && dist_left <= dist_right) ? 2'b10 :
-                             (dist_down <= dist_right) ? 2'b01 : 2'b11;
-
-wire [1:0] next_blinky_dir = is_blinky_tile_center ? best_blinky_dir : blinky_dir;
-
+// tile logic (1:wall, 0:path)
 reg [4:0] tile_x_idx; // 0 to 19 (8x8 pixel tiles)
 reg [3:0] tile_y_idx; // 0 to 14
 wire is_draw_wall;
@@ -338,7 +227,7 @@ tilemap_rom map_render(
     .tile_y(tile_y_idx),
     .is_wall(is_draw_wall));
 
-// detects walls around tiles				
+// detects walls around path tiles				
 wire wall_above_render;
 wire wall_below_render;
 wire wall_left_render;
@@ -364,22 +253,155 @@ tilemap_rom map_rt (
 	.tile_y(tile_y_idx),
 	.is_wall(wall_right_render));
 
-
+//pacman location & size
 reg[9:0] pacman_x_pos;
 reg[9:0] pacman_y_pos;
 parameter PACMAN_SIZE = 10'd8; //dimensions of pacman (also tile length and width)
 
-reg[9:0] draw_x;
-reg[9:0] draw_y;
+//ghost specific target calculations [general logic in ghost_controller.v , pinky&clyde&inky logic is slightly modified off of that]
+	//pacman position for ghosts to read
+wire [4:0] pacman_tile_x = pacman_x_pos >> 3;
+wire [3:0] pacman_tile_y = pacman_y_pos >> 3;	
 
+	//blinky
+wire [9:0] blinky_x_pos;
+wire [9:0] blinky_y_pos;
+wire [1:0] blinky_dir;
+wire [4:0] blinky_target_x = pacman_center_tile_x;
+wire [3:0] blinky_target_y = pacman_center_tile_y;
+
+
+	//pinky (same as blinky but targets the tile four ahead of direction pacman faces)
+wire [9:0] pinky_x_pos;
+wire [9:0] pinky_y_pos;
+wire [1:0] pinky_dir;
+wire [4:0] pinky_target_x = (direction == 2'b11) ? ((pacman_center_tile_x < 5'd15) ? pacman_center_tile_x + 5'd4 : 5'd19) : (direction == 2'b10) ? ((pacman_center_tile_x > 5'd4) ? pacman_center_tile_x - 5'd4 : 5'd0) : pacman_center_tile_x;
+wire [3:0] pinky_target_y = (direction == 2'b01) ? ((pacman_center_tile_y < 4'd10) ? pacman_center_tile_y + 4'd4 : 4'd14) : (direction == 2'b00) ? ((pacman_center_tile_y > 4'd4) ? pacman_center_tile_y - 4'd4 : 4'd0) : pacman_center_tile_y;
+
+	//inky
+
+	
+	//clyde
+
+
+
+
+	//ghost logic instantiations (ghost_controller.v)
+ghost_controller blinky_ai(
+    .clk(clk), .rst(rst), .started(started),
+    .release_signal(1'b1),
+	 .frame_tick(frame_tick),
+    .spawn_x(10'd56), .spawn_y(10'd56),
+    .release_x(10'd56), .release_y(10'd56),
+    .initial_direction(2'b10),
+    .target_tile_x(blinky_target_x), .target_tile_y(blinky_target_y),
+    .speed_mask(2'b11),
+    .ghost_x_pos(blinky_x_pos), .ghost_y_pos(blinky_y_pos), .ghost_direction(blinky_dir)
+);
+
+ghost_controller pinky_ai(
+    .clk(clk), .rst(rst), .started(started),
+    .release_signal(pellets_eaten >= 13'd5),
+    .spawn_x(10'd72), .spawn_y(10'd64),
+    .release_x(10'd56), .release_y(10'd56),
+    .initial_direction(2'b01),
+	 .frame_tick(frame_tick),
+    .target_tile_x(pinky_target_x), .target_tile_y(pinky_target_y),
+    .speed_mask(2'b11),
+    .ghost_x_pos(pinky_x_pos), .ghost_y_pos(pinky_y_pos), .ghost_direction(pinky_dir)
+);
+
+
+
+reg [1:0] ghost_select;
+
+reg [9:0]  active_ghost_x;    
+reg [9:0]  active_ghost_y;
+reg [1:0]  active_ghost_dir;   
+reg [23:0] active_body_color;
+
+always @(*) begin
+    case (ghost_select)
+        2'b00: begin //blinky
+            active_ghost_x = blinky_x_pos;
+            active_ghost_y = blinky_y_pos;
+            active_ghost_dir = blinky_dir;
+            active_body_color = 24'hFF0000;
+        end
+        2'b01: begin //pinky
+            active_ghost_x = pinky_x_pos;
+            active_ghost_y = pinky_y_pos;
+            active_ghost_dir = pinky_dir;
+            active_body_color = 24'hFFB8FF;
+        end
+ //       2'b10: begin //inky
+ //           active_ghost_x = inky_x_pos;
+ //           active_ghost_y = inky_y_pos;
+ //           active_ghost_dir = inky_dir;
+ //           active_body_color = 24'h00FFFF;
+ //       end
+ //       2'b11: begin //clyde
+ //           active_ghost_x = clyde_x_pos;
+ //           active_ghost_y = clyde_y_pos;
+ //           active_ghost_dir = clyde_dir;
+ //           active_body_color = 24'hFFB852;
+ //       end
+    endcase
+end
+
+	//individual ghost color wires
+wire [23:0] blinky_raw_color;
+wire [23:0] pinky_raw_color;
+	
+
+
+	//ghost coloring instantiations (ghostname_sprite.v)
+blinky_sprite blinky_render_inst(
+    .draw_x(draw_x[2:0]),
+    .draw_y(draw_y[2:0]),
+    .direction(active_ghost_dir),
+    .color(blinky_raw_color)
+);
+
+pinky_sprite pinky_render_inst(
+    .draw_x(draw_x[2:0]),
+    .draw_y(draw_y[2:0]),
+    .direction(active_ghost_dir),
+    .color(pinky_raw_color)
+);
+
+//mux based on ghost_select
+reg [23:0] final_ghost_color;
+
+always @(*) begin
+    case (ghost_select)
+        2'b00: final_ghost_color = blinky_raw_color;
+        2'b01: final_ghost_color = pinky_raw_color;
+        2'b10: final_ghost_color = inky_raw_color;
+        2'b11: final_ghost_color = clyde_raw_color;
+        default: final_ghost_color = 24'h000000;
+    endcase
+end
+
+reg [9:0] draw_x;
+reg [9:0] draw_y;
+
+//ghost release conditions
+reg pinky_release;
+
+
+//key latching / movement helpers
 reg [1:0] direction; // key3 left, key2 up, key1 down, key0 right
 reg started;
 
-reg pinky_release;
+//regulating ghost speed
+wire frame_tick = (S == MOVE);
 
-// fsm state parameters
+//fsm parameters
 reg [3:0]S;
 reg [3:0]NS;
+
+
 
 parameter START = 4'b0000,
 			CLEAR = 4'b0001,
@@ -391,24 +413,24 @@ parameter START = 4'b0000,
 			DRAW_WALL = 4'b0111,
 			SYNC_HIGH = 4'b1000, //waits for screen to start scanning
 			COLOR_GHOST = 4'b1001;
-
-// key latching logic. makes movement continuous (no need to hold key) & joystick
-
+//joystick wires
 wire joy_up = KEY[2] && GPIO_0[0];
 wire joy_down = KEY[1] && GPIO_0[1];
 wire joy_left =  KEY[3] && GPIO_0[2];
 wire joy_right = KEY[0] && GPIO_0[3];
 
+
+// key latching logic. makes movement continuous (no need to hold key) & joystick
 always @(posedge clk or negedge rst) 
 		if (!rst) 
 			begin
-				direction <= 2'b00;	// key latching logic. makes movement continuous so no need to hold a key
+				direction <= 2'b00;
 				started <= 1'b0;
 			end
 		else
 			begin
-				if (joy_up == 1'b0) begin //up		//nested if statements to protect movement from stopping
-					started <= 1'b1;		            //if pressed keys direction is not a playable tile
+				if (joy_up == 1'b0) begin //up		
+					started <= 1'b1;		            
 					if (!wall_above)  		         
 						direction <= 2'b00; end
 				else if (joy_down == 1'b0) begin //down
@@ -461,7 +483,7 @@ begin
 
 		ERASE:
 		begin
-			if ((draw_x == PACMAN_SIZE - 1) && (draw_y == PACMAN_SIZE -1)) //once the old location is painted black, move on
+			if ((draw_x == PACMAN_SIZE - 1) && (draw_y == PACMAN_SIZE -1))
 				NS = MOVE;
 			else
 				NS = ERASE;
@@ -471,23 +493,17 @@ begin
 
 		COLOR: 
 		begin	
-			if ((draw_x == PACMAN_SIZE - 1) && (draw_y == PACMAN_SIZE - 1)) //once the new location is painted, move on
+			if ((draw_x == PACMAN_SIZE - 1) && (draw_y == PACMAN_SIZE - 1))
 				NS = COLOR_GHOST;
 			else
 				NS = COLOR;
 		end
 		
-		COLOR_GHOST:
-		begin
-			if ((draw_x == PACMAN_SIZE - 1) && (draw_y == PACMAN_SIZE - 1)) // draws blinky
-				NS = SYNC_HIGH;
-			else
-				NS = COLOR_GHOST;
-		end
+		COLOR_GHOST: NS = ((draw_x == PACMAN_SIZE - 1) && (draw_y == PACMAN_SIZE - 1) && (ghost_select == 2'b11)) ? SYNC_HIGH : COLOR_GHOST;
 			
 		DRAW_WALL:
 		begin 
-			if ((draw_x == 10'd7) && (draw_y == 10'd7) && (tile_x_idx == 5'd19) && (tile_y_idx == 4'd14)) // stops drawing after all pixels have been drawn
+			if ((draw_x == 10'd7) && (draw_y == 10'd7) && (tile_x_idx == 5'd19) && (tile_y_idx == 4'd14))
 				NS = COLOR;
 			else
 				NS = DRAW_WALL;
@@ -495,7 +511,7 @@ begin
 
 		SYNC_HIGH:
 		begin
-			if (VGA_VS == 1'b1) // waits for vertical sync
+			if (VGA_VS == 1'b1)
 				NS = WAIT;
 			else
 				NS = SYNC_HIGH;
@@ -511,7 +527,7 @@ always @ (posedge clk or negedge rst)
 begin
 	if (rst == 1'b0)
 	begin
-		the_vga_draw_frame_write_mem_address <= 15'd0; //screen to black
+		the_vga_draw_frame_write_mem_address <= 15'd0;
 		the_vga_draw_frame_write_mem_data <= 24'd0;
 		the_vga_draw_frame_write_a_pixel <= 1'b0;
 	
@@ -521,17 +537,14 @@ begin
 			
 		pacman_x_pos <= 10'd128;
 		pacman_y_pos <= 10'd56; 
-		
-		blinky_x_pos <= 10'd56;
-		blinky_y_pos <= 10'd56;
-		blinky_dir <= 2'b10;
-		blinky_speed_counter <= 2'b00;
 			
 		tile_x_idx <= 5'd0;
 		tile_y_idx <= 4'd0;
 		
 		eaten_pellet <= 300'd0;
 		pellets_eaten <= 13'd0;
+		
+		ghost_select <= 1'b0;
 		
 	end
 
@@ -547,16 +560,17 @@ begin
 			CLEAR:
 			begin
 				the_vga_draw_frame_write_mem_address <= idx_location; // paints pixels over black
-            the_vga_draw_frame_write_mem_data <= 24'h000000;   
-            the_vga_draw_frame_write_a_pixel <= 1'b1;
-            idx_location <= idx_location + 1'b1;
-         end
+           			the_vga_draw_frame_write_mem_data <= 24'h000000;   
+            			the_vga_draw_frame_write_a_pixel <= 1'b1;
+            			idx_location <= idx_location + 1'b1;
+         		end
 
 			WAIT:
 			begin
 				the_vga_draw_frame_write_a_pixel <= 1'b0; //resets draw signals while waiting so stages don't overlap
 				draw_x <= 10'd0;
 				draw_y <= 10'd0;
+				ghost_select <= 1'b0;
 			end
 				
 			SYNC_LOW:
@@ -566,8 +580,7 @@ begin
 
 			ERASE: 
 			begin
-				the_vga_draw_frame_write_mem_address <= ((pacman_x_pos + draw_x) * VIRTUAL_PIXEL_HEIGHT) + (pacman_y_pos + draw_y); // draws black when player leaves the tile
-				the_vga_draw_frame_write_mem_data <= 24'h000000;
+				the_vga_draw_frame_write_mem_address <= ((pacman_x_pos + draw_x) * VIRTUAL_PIXEL_HEIGHT) + (pacman_y_pos + draw_y); 								the_vga_draw_frame_write_mem_data <= 24'h000000;
 				the_vga_draw_frame_write_a_pixel <= 1'b1;
 					
 				if(draw_x < PACMAN_SIZE - 1)
@@ -604,48 +617,19 @@ begin
 						2'b10: if((pacman_x_pos > 0) && !wall_left)
 								pacman_x_pos <= (pacman_x_pos - 1'b1);
 								
-						2'b11: if(((pacman_x_pos + PACMAN_SIZE) < (VIRTUAL_PIXEL_WIDTH - 1'b1)) && !wall_right) //2'b00 and 2'b10 are longer because they are the sides that DONT directly touch the borders (top left corner)
-								pacman_x_pos <= (pacman_x_pos + 1'b1);
+						2'b11: if(((pacman_x_pos + PACMAN_SIZE) < (VIRTUAL_PIXEL_WIDTH - 1'b1)) && !wall_right) 													pacman_x_pos <= (pacman_x_pos + 1'b1);
 								
 					endcase
 						if (pacman_y_pos == 1'b0) begin
 								pacman_y_pos <= (VIRTUAL_PIXEL_HEIGHT - PACMAN_SIZE - 2'b10); end
 						else if (pacman_y_pos == (VIRTUAL_PIXEL_HEIGHT - PACMAN_SIZE - 1'b1)) begin
 								pacman_y_pos <= 1'b1; end
-						
-//						if (!pinky_released && (pellets_eaten >= 9'd10)) begin // releases pinky when 10 pellets have been eaten
-//								pinky_x_pos     <= 10'd56;
-//								pinky_y_pos     <= 10'd56;
-//								pinky_released  <= 1'b1;
-//						end
-//						else if (!pinky_released) begin
-//
-//						end // will need to add something here when pinky variables exist
-						
-						blinky_speed_counter <= blinky_speed_counter + 1'b1;
-						
-						if(blinky_speed_counter != 2'b11) begin // blinky moves at 75% speed (100% makes the game impossible)
-							blinky_dir <= next_blinky_dir;
-
-							case(next_blinky_dir)
-								2'b00: if (!blinky_wall_above) blinky_y_pos <= blinky_y_pos - 1'b1;
-								2'b01: if (!blinky_wall_below) blinky_y_pos <= blinky_y_pos + 1'b1;
-								2'b10: if (!blinky_wall_left)  blinky_x_pos <= blinky_x_pos - 1'b1;
-								2'b11: if (!blinky_wall_right) blinky_x_pos <= blinky_x_pos + 1'b1;
-							endcase
-							
-						if (blinky_y_pos == 1'b0) begin
-								blinky_y_pos <= (VIRTUAL_PIXEL_HEIGHT - PACMAN_SIZE - 2'b10); end
-						else if (blinky_y_pos == (VIRTUAL_PIXEL_HEIGHT - PACMAN_SIZE - 1'b1)) begin
-								blinky_y_pos <= 1'b1; end
-							
 								end
 							end
-						end
+						
 			COLOR:
 				begin
-					the_vga_draw_frame_write_mem_address <= ((pacman_x_pos + draw_x) * VIRTUAL_PIXEL_HEIGHT) + (pacman_y_pos + draw_y); // loops to draw pacman pixels white
-					the_vga_draw_frame_write_mem_data <= pacman_color;
+					the_vga_draw_frame_write_mem_address <= ((pacman_x_pos + draw_x) * VIRTUAL_PIXEL_HEIGHT) + (pacman_y_pos + draw_y); 								the_vga_draw_frame_write_mem_data <= pacman_color;
 					the_vga_draw_frame_write_a_pixel <= 1'b1;
 
 					if(draw_x < PACMAN_SIZE - 1)
@@ -659,10 +643,9 @@ begin
 					end
 				end
 				
-			COLOR_GHOST:
-				begin
-					 the_vga_draw_frame_write_mem_address <= ((blinky_x_pos + draw_x) * VIRTUAL_PIXEL_HEIGHT) + (blinky_y_pos + draw_y);
-					 the_vga_draw_frame_write_mem_data <= blinky_color;
+			COLOR_GHOST: begin
+					 the_vga_draw_frame_write_mem_address <= ((active_ghost_x + draw_x) * VIRTUAL_PIXEL_HEIGHT) + (active_ghost_y + draw_y);
+					 the_vga_draw_frame_write_mem_data <= final_ghost_color;
 					 the_vga_draw_frame_write_a_pixel <= 1'b1;
 
 					 if (draw_x < PACMAN_SIZE - 1)
@@ -671,8 +654,11 @@ begin
 						  draw_x <= 10'd0;
 						  if (draw_y < PACMAN_SIZE - 1)
 								draw_y <= draw_y + 1'b1;
-						  else
+						  else begin
 								draw_y <= 10'd0;
+								if (ghost_select < 2'b11)
+								    ghost_select <= ghost_select + 1'b1; //moves between the ghosts
+						  end
 					 end
 				end
 
