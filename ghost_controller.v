@@ -2,22 +2,22 @@ module ghost_controller(
     input clk,
     input rst,
     input started,
-    input release_signal,          // 1'b1 when the ghost should be released (like pellets_eaten >= 5)
-    input [9:0] spawn_x,           // cage spawn x position
-    input [9:0] spawn_y,
-	 input frame_tick,
-    input [9:0] release_x,         // x position it teleports to (outside the gate)
-    input [9:0] release_y,         // y position it teleports to (outside the gate)
-    input [1:0] initial_direction, // 00 up, 01 down, 10 left, 11 right
-    input [4:0] target_tile_x,     // target tile x (0 to 19)
-    input [3:0] target_tile_y,     // target tile y (0 to 14)
-    input [1:0] speed_mask,        // speed mask (2'b11 = 75% speed)
+    input release_signal,          // 1'b1 when release condition is met
+    input [9:0] spawn_x,           // initial cage spawn x position
+    input [9:0] spawn_y,			  // initial cage spawn y position 
+	 input frame_tick,				  // frame tick counter for variable speed
+    input [9:0] release_x,         
+    input [9:0] release_y,         
+    input [1:0] initial_direction, 
+    input [4:0] target_tile_x,     
+    input [3:0] target_tile_y,     
+    input [1:0] speed_mask,        // speed mask (variable number for speed changes)
     output reg [9:0] ghost_x_pos,
     output reg [9:0] ghost_y_pos,
     output reg [1:0] ghost_direction
 );
 
-    parameter GHOST_SIZE           = 10'd8;
+    parameter GHOST_SIZE = 10'd8;
     parameter VIRTUAL_PIXEL_HEIGHT = 16'd120;
 
     reg [1:0] speed_counter;
@@ -69,15 +69,13 @@ module ghost_controller(
     wire [3:0] y_left = (ghost_tile_y > target_tile_y) ? (ghost_tile_y - target_tile_y) : (target_tile_y - ghost_tile_y);
     wire [3:0] y_right = y_left;
 
-    wire [9:0] dist_up   = (wall_above || ghost_direction == 2'b01 || ghost_tile_y == 4'd0)  ? 10'h3FF : (x_up * x_up + y_up * y_up);
+    wire [9:0] dist_up = (wall_above || ghost_direction == 2'b01 || ghost_tile_y == 4'd0) ? 10'h3FF : (x_up * x_up + y_up * y_up);
     wire [9:0] dist_down = (wall_below || ghost_direction == 2'b00 || ghost_tile_y == 4'd14) ? 10'h3FF : (x_down * x_down + y_down * y_down);
     wire [9:0] dist_left = (wall_left  || ghost_direction == 2'b11 || ghost_tile_x == 5'd0)  ? 10'h3FF : (x_left * x_left + y_left * y_left);
     wire [9:0] dist_right= (wall_right || ghost_direction == 2'b10 || ghost_tile_x == 5'd19) ? 10'h3FF : (x_right * x_right + y_right * y_right);
 
     // direction hierarchy
-    wire [1:0] best_direction = (dist_up <= dist_left && dist_up <= dist_down && dist_up <= dist_right) ? 2'b00 :
-                                (dist_left <= dist_down && dist_left <= dist_right) ? 2'b10 :
-                                (dist_down <= dist_right) ? 2'b01 : 2'b11;
+    wire [1:0] best_direction = (dist_up <= dist_left && dist_up <= dist_down && dist_up <= dist_right) ? 2'b00 : (dist_left <= dist_down && dist_left <= dist_right) ? 2'b10 :(dist_down <= dist_right) ? 2'b01 : 2'b11;
 
     wire [1:0] next_direction = is_tile_center ? best_direction : ghost_direction;
 
@@ -99,7 +97,7 @@ module ghost_controller(
                 speed_counter <= speed_counter + 1'b1;
 
                 // slowed down to 75% speed 
-                if (speed_counter != speed_mask) begin
+                if (speed_counter[0] == 1'b0) begin
                     ghost_direction <= next_direction;
 
                     case (next_direction)

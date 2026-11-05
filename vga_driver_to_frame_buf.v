@@ -270,7 +270,6 @@ wire [1:0] blinky_dir;
 wire [4:0] blinky_target_x = pacman_center_tile_x;
 wire [3:0] blinky_target_y = pacman_center_tile_y;
 
-
 	//pinky (same as blinky but targets the tile four ahead of direction pacman faces)
 wire [9:0] pinky_x_pos;
 wire [9:0] pinky_y_pos;
@@ -279,12 +278,28 @@ wire [4:0] pinky_target_x = (direction == 2'b11) ? ((pacman_center_tile_x < 5'd1
 wire [3:0] pinky_target_y = (direction == 2'b01) ? ((pacman_center_tile_y < 4'd10) ? pacman_center_tile_y + 4'd4 : 4'd14) : (direction == 2'b00) ? ((pacman_center_tile_y > 4'd4) ? pacman_center_tile_y - 4'd4 : 4'd0) : pacman_center_tile_y;
 
 	//inky
-
+wire [9:0] inky_x_pos;
+wire [9:0] inky_y_pos;
+wire [1:0] inky_dir;
+wire [4:0] blinky_tile_x = blinky_x_pos >> 3;
+wire [3:0] blinky_tile_y = blinky_y_pos >> 3;
+wire [5:0] pacman_2x_x = pacman_center_tile_x << 1;
+wire [4:0] pacman_2x_y = pacman_center_tile_y << 1;
+wire [4:0] inky_target_x = (pacman_2x_x < blinky_tile_x) ? 5'd0 : ((pacman_2x_x - blinky_tile_x) > 5'd19) ? 5'd19 : (pacman_2x_x - blinky_tile_x);
+wire [3:0] inky_target_y = (pacman_2x_y < blinky_tile_y) ? 4'd0 : ((pacman_2x_y - blinky_tile_y) > 4'd14) ? 4'd14 :(pacman_2x_y - blinky_tile_y);
+	
 	
 	//clyde
-
-
-
+wire [9:0] clyde_x_pos;
+wire [9:0] clyde_y_pos;
+wire [1:0] clyde_dir;
+wire [4:0] clyde_tile_x = clyde_x_pos >> 3;
+wire [3:0] clyde_tile_y = clyde_y_pos >> 3;
+wire [4:0] clyde_dx = (clyde_tile_x > pacman_center_tile_x) ? (clyde_tile_x - pacman_center_tile_x) : (pacman_center_tile_x - clyde_tile_x);
+wire [3:0] clyde_dy = (clyde_tile_y > pacman_center_tile_y) ? (clyde_tile_y - pacman_center_tile_y) : (pacman_center_tile_y - clyde_tile_y);
+wire [9:0] clyde_dist_sq = (clyde_dx * clyde_dx) + (clyde_dy * clyde_dy);
+wire [4:0] clyde_target_x = (clyde_dist_sq > 10'd64) ? pacman_center_tile_x : 5'd0;
+wire [3:0] clyde_target_y = (clyde_dist_sq > 10'd64) ? pacman_center_tile_y : 4'd14;
 
 	//ghost logic instantiations (ghost_controller.v)
 ghost_controller blinky_ai(
@@ -311,7 +326,29 @@ ghost_controller pinky_ai(
     .ghost_x_pos(pinky_x_pos), .ghost_y_pos(pinky_y_pos), .ghost_direction(pinky_dir)
 );
 
+ghost_controller inky_ai(
+    .clk(clk), .rst(rst), .started(started),
+    .release_signal(pellets_eaten >= 13'd30),
+    .spawn_x(10'd72), .spawn_y(10'd56),
+    .release_x(10'd56), .release_y(10'd56),
+    .initial_direction(2'b00),
+    .frame_tick(frame_tick),
+    .target_tile_x(inky_target_x), .target_tile_y(inky_target_y),
+    .speed_mask(2'b11),
+    .ghost_x_pos(inky_x_pos), .ghost_y_pos(inky_y_pos), .ghost_direction(inky_dir)
+);
 
+ghost_controller clyde_ai(
+    .clk(clk), .rst(rst), .started(started),
+    .release_signal(pellets_eaten >= 13'd60),
+    .spawn_x(10'd72), .spawn_y(10'd48),
+    .release_x(10'd56), .release_y(10'd56),
+    .initial_direction(2'b00),
+    .frame_tick(frame_tick),
+    .target_tile_x(clyde_target_x), .target_tile_y(clyde_target_y),
+    .speed_mask(2'b11),
+    .ghost_x_pos(clyde_x_pos), .ghost_y_pos(clyde_y_pos), .ghost_direction(clyde_dir)
+);
 
 reg [1:0] ghost_select;
 
@@ -334,24 +371,26 @@ always @(*) begin
             active_ghost_dir = pinky_dir;
             active_body_color = 24'hFFB8FF;
         end
- //       2'b10: begin //inky
- //           active_ghost_x = inky_x_pos;
- //           active_ghost_y = inky_y_pos;
- //           active_ghost_dir = inky_dir;
- //           active_body_color = 24'h00FFFF;
- //       end
- //       2'b11: begin //clyde
- //           active_ghost_x = clyde_x_pos;
- //           active_ghost_y = clyde_y_pos;
- //           active_ghost_dir = clyde_dir;
- //           active_body_color = 24'hFFB852;
- //       end
+        2'b10: begin //inky
+            active_ghost_x = inky_x_pos;
+            active_ghost_y = inky_y_pos;
+            active_ghost_dir = inky_dir;
+            active_body_color = 24'h00FFFF;
+        end
+        2'b11: begin //clyde
+            active_ghost_x = clyde_x_pos;
+            active_ghost_y = clyde_y_pos;
+            active_ghost_dir = clyde_dir;
+            active_body_color = 24'hFFB852;
+        end
     endcase
 end
 
 	//individual ghost color wires
 wire [23:0] blinky_raw_color;
 wire [23:0] pinky_raw_color;
+wire [23:0] inky_raw_color;
+wire [23:0] clyde_raw_color;
 	
 
 
@@ -370,6 +409,19 @@ pinky_sprite pinky_render_inst(
     .color(pinky_raw_color)
 );
 
+inky_sprite inky_render_inst(
+    .draw_x(draw_x[2:0]),
+    .draw_y(draw_y[2:0]),
+    .direction(active_ghost_dir),
+    .color(inky_raw_color)
+);
+
+clyde_sprite clyde_render_inst(
+    .draw_x(draw_x[2:0]),
+    .draw_y(draw_y[2:0]),
+    .direction(active_ghost_dir),
+    .color(clyde_raw_color)
+);
 //mux based on ghost_select
 reg [23:0] final_ghost_color;
 
@@ -413,6 +465,7 @@ parameter START = 4'b0000,
 			DRAW_WALL = 4'b0111,
 			SYNC_HIGH = 4'b1000, //waits for screen to start scanning
 			COLOR_GHOST = 4'b1001;
+			
 //joystick wires
 wire joy_up = KEY[2] && GPIO_0[0];
 wire joy_down = KEY[1] && GPIO_0[1];
@@ -617,7 +670,8 @@ begin
 						2'b10: if((pacman_x_pos > 0) && !wall_left)
 								pacman_x_pos <= (pacman_x_pos - 1'b1);
 								
-						2'b11: if(((pacman_x_pos + PACMAN_SIZE) < (VIRTUAL_PIXEL_WIDTH - 1'b1)) && !wall_right) 													pacman_x_pos <= (pacman_x_pos + 1'b1);
+						2'b11: if(((pacman_x_pos + PACMAN_SIZE) < (VIRTUAL_PIXEL_WIDTH - 1'b1)) && !wall_right) 													
+								pacman_x_pos <= (pacman_x_pos + 1'b1);
 								
 					endcase
 						if (pacman_y_pos == 1'b0) begin
@@ -629,7 +683,8 @@ begin
 						
 			COLOR:
 				begin
-					the_vga_draw_frame_write_mem_address <= ((pacman_x_pos + draw_x) * VIRTUAL_PIXEL_HEIGHT) + (pacman_y_pos + draw_y); 								the_vga_draw_frame_write_mem_data <= pacman_color;
+					the_vga_draw_frame_write_mem_address <= ((pacman_x_pos + draw_x) * VIRTUAL_PIXEL_HEIGHT) + (pacman_y_pos + draw_y); 								
+					the_vga_draw_frame_write_mem_data <= pacman_color;
 					the_vga_draw_frame_write_a_pixel <= 1'b1;
 
 					if(draw_x < PACMAN_SIZE - 1)

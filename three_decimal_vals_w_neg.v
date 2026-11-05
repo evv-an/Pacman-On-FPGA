@@ -1,4 +1,6 @@
-module three_decimal_vals_w_neg(input [12:0]count1,
+module three_decimal_vals_w_neg(input [12:0]pellets,
+	//input [12:0]largepellets, 
+	//input [12:0]ghosts, //ghost points will be handled in the main module since the multiplier resets
 	output [6:0]HEX33,
 	output [6:0]HEX23,
 	output [6:0]HEX13,
@@ -6,7 +8,7 @@ module three_decimal_vals_w_neg(input [12:0]count1,
 
 
 wire [12:0]val;
-assign val = count1[12:0];
+assign val = (pellets * 12'd10); // will add large pellet and ghost points here once those exist
 
 wire [6:0]seg7_thousands1;
 wire [6:0]seg7_hundreds1;
@@ -22,6 +24,8 @@ reg [3:0] result_thous_digit;
 reg [3:0] result_hunds_digit;
 reg [3:0] result_tens_digit;
 reg [3:0] result_ones_digit;
+
+
 
 always @(*)
 begin
