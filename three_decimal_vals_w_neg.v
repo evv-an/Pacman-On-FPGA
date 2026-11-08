@@ -1,6 +1,6 @@
 module three_decimal_vals_w_neg(input [12:0]pellets,
-	//input [12:0]largepellets, 
-	//input [12:0]ghosts, //ghost points will be handled in the main module since the multiplier resets
+	input [12:0]largepellets, 
+	input [12:0]ghosts,
 	output [6:0]HEX33,
 	output [6:0]HEX23,
 	output [6:0]HEX13,
@@ -8,7 +8,7 @@ module three_decimal_vals_w_neg(input [12:0]pellets,
 
 
 wire [12:0]val;
-assign val = (pellets * 12'd10); // will add large pellet and ghost points here once those exist
+assign val = ((pellets * 13'd10) + (largepellets * 13'd50) + ghosts);
 
 wire [6:0]seg7_thousands1;
 wire [6:0]seg7_hundreds1;
@@ -29,10 +29,10 @@ reg [3:0] result_ones_digit;
 
 always @(*)
 begin
-	result_ones_digit = 12'd0;
-	result_tens_digit = ((val % 12'd1000) % 12'd100) / 12'd10;
-	result_hunds_digit = (val % 12'd1000) / 12'd100;
-	result_thous_digit = val / 12'd1000;
+	result_ones_digit = 13'd0;
+	result_tens_digit = ((val % 13'd1000) % 13'd100) / 13'd10;
+	result_hunds_digit = (val % 13'd1000) / 13'd100;
+	result_thous_digit = val / 13'd1000;
 end
 
 seven_segment my_seven_segment_ones(result_ones_digit, seg7_ones1);
