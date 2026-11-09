@@ -80,7 +80,7 @@ parameter VIRTUAL_PIXEL_WIDTH = VGA_WIDTH/PIXEL_VIRTUAL_SIZE; // 160
 parameter VIRTUAL_PIXEL_HEIGHT = VGA_HEIGHT/PIXEL_VIRTUAL_SIZE; // 120
 
 
-//define tile for ghost gate and border drawing
+//define tile for ghost cage gate and border drawing
 parameter GATE_TILE_X = 5'd8; 
 parameter GATE_TILE_Y = 4'd7; 
 parameter TILE_ABOVE_GATE_X = 5'd8;
@@ -126,8 +126,8 @@ reg [6:0] death_timer;
 assign LEDR[2:0] = lives; //case statement to fix
 
 
-//pacman drawing & animation
-wire [23:0] pacman_color;
+//pacman drawing & animations
+wire [23:0] raw_pacman_color;
 reg [4:0] pacman_anim_timer;
 wire [1:0] anim_frame = pacman_anim_timer[4:3];
 pacman_sprite pacman_render(
@@ -135,8 +135,10 @@ pacman_sprite pacman_render(
     .draw_y(draw_y[2:0]),
     .direction(direction),
 	 .anim_frame(anim_frame),
-    .color(pacman_color));
+    .color(raw_pacman_color));
 
+wire pacman_visible = (death_timer == 7'd0) || death_timer[3];
+wire [23:0] pacman_color = pacman_visible ? raw_pacman_color : 24'h000000;
 	 
 //pellet system logic & registers 
 parameter TOTAL_PELLETS = 13'd116;
@@ -330,6 +332,10 @@ scared_ghost_sprite scared_render_inst(
     .color(scared_raw_color)
 );
 
+//ghost feet animations
+reg [3:0] ghost_anim_timer;
+reg [1:0] ghost_anim_frame;
+
 
 //ghost scared tracking logic (cleared individually when eaten)
 reg blinky_scared, pinky_scared, inky_scared, clyde_scared;
@@ -339,15 +345,15 @@ wire pinky_is_frightened  = is_frightened && pinky_scared;
 wire inky_is_frightened   = is_frightened && inky_scared;
 wire clyde_is_frightened  = is_frightened && clyde_scared;
 
-wire blinky_eaten = (blinky_respawn_timer > 7'd0);
-wire pinky_eaten  = (pinky_respawn_timer > 7'd0);
-wire inky_eaten   = (inky_respawn_timer > 7'd0);
-wire clyde_eaten  = (clyde_respawn_timer > 7'd0);
+wire blinky_eaten = (blinky_respawn_timer > 8'd0);
+wire pinky_eaten  = (pinky_respawn_timer > 8'd0);
+wire inky_eaten   = (inky_respawn_timer > 8'd0);
+wire clyde_eaten  = (clyde_respawn_timer > 8'd0);
 
-reg [6:0] blinky_respawn_timer;
-reg [6:0] pinky_respawn_timer;
-reg [6:0] inky_respawn_timer;
-reg [6:0] clyde_respawn_timer;
+reg [7:0] blinky_respawn_timer;
+reg [7:0] pinky_respawn_timer;
+reg [7:0] inky_respawn_timer;
+reg [7:0] clyde_respawn_timer;
 
 // ghost position wires from ai controllers
 wire [9:0] blinky_x_pos, blinky_y_pos;
@@ -437,11 +443,15 @@ wire [3:0] clyde_target_y = clyde_is_frightened ? 4'd14 : ((clyde_dist_sq > 10'd
 
 
 //ghost ai controller instantiations
+
+wire [9:0] blinky_spawn_x = blinky_eaten ? 10'd72 : 10'd56;
+wire [9:0] blinky_spawn_y = 10'd56;
+
 ghost_controller blinky_ai(
     .clk(clk), .rst(blinky_rst), .started(started),
     .release_signal(blinky_release_sig),
     .frame_tick(frame_tick),
-    .spawn_x(10'd56), .spawn_y(10'd56),
+    .spawn_x(blinky_spawn_x), .spawn_y(blinky_spawn_y),
     .release_x(10'd56), .release_y(10'd56),
     .initial_direction(2'b10),
     .target_tile_x(blinky_target_x), .target_tile_y(blinky_target_y),
@@ -534,6 +544,7 @@ blinky_sprite blinky_render_inst(
     .draw_x(draw_x[2:0]),
     .draw_y(draw_y[2:0]),
     .direction(active_ghost_dir),
+    .anim_frame(ghost_anim_frame),
     .color(blinky_raw_color)
 );
 
@@ -541,6 +552,7 @@ pinky_sprite pinky_render_inst(
     .draw_x(draw_x[2:0]),
     .draw_y(draw_y[2:0]),
     .direction(active_ghost_dir),
+    .anim_frame(ghost_anim_frame),
     .color(pinky_raw_color)
 );
 
@@ -548,6 +560,7 @@ inky_sprite inky_render_inst(
     .draw_x(draw_x[2:0]),
     .draw_y(draw_y[2:0]),
     .direction(active_ghost_dir),
+    .anim_frame(ghost_anim_frame),
     .color(inky_raw_color)
 );
 
@@ -555,9 +568,9 @@ clyde_sprite clyde_render_inst(
     .draw_x(draw_x[2:0]),
     .draw_y(draw_y[2:0]),
     .direction(active_ghost_dir),
+    .anim_frame(ghost_anim_frame),
     .color(clyde_raw_color)
 );
-
 
 //checks if ghost is currently scared or eaten
 wire active_is_eaten = (ghost_select == 2'b00 && blinky_eaten) || (ghost_select == 2'b01 && pinky_eaten) || (ghost_select == 2'b10 && inky_eaten) || (ghost_select == 2'b11 && clyde_eaten);
@@ -599,8 +612,9 @@ reg [1:0] direction;
 reg started;
 
 
-//regulating ghost speed
-wire frame_tick = (S == MOVE);
+//regulating ghost speed and entity freezes upon ghost death
+reg [5:0] freeze_timer;
+wire frame_tick = (S == MOVE) && (freeze_timer == 6'd0);
 
 
 //fsm parameters
@@ -754,6 +768,7 @@ begin
 		super_pellet_blink_counter <= 5'd0;
 		
 		stagger_timer <= 8'd0;
+		freeze_timer <= 6'd0;
 		
 		ghost_select <= 1'b0;
 		
@@ -773,6 +788,9 @@ begin
 		inky_scared <= 1'b0;
 		clyde_scared <= 1'b0;
 		
+		ghost_anim_timer <= 4'd0;
+		ghost_anim_frame <= 2'b00;
+
 	end
 	else begin
 		case(S)
@@ -838,44 +856,27 @@ begin
 					else
 						  super_pellet_blink_counter <= super_pellet_blink_counter + 1'b1;
 					
-					if(!eaten_pellet[eat_idx] && !no_pellet) begin
-						  eaten_pellet[eat_idx] <= 1'b1;
-						  pellets_eaten <= pellets_eaten + 1'b1; 
-					end
-						  
-					if(!eaten_super_pellet[eat_idx] && is_super_pellet) begin
-						  eaten_super_pellet[eat_idx] <= 1'b1;
-						  super_pellets_eaten <= super_pellets_eaten + 1'b1;
-						  frightened_timer <= 9'd360;
-						  
-						  blinky_scared <= 1'b1;
-						  pinky_scared <= 1'b1;
-						  inky_scared <= 1'b1;
-						  clyde_scared <= 1'b1;
-
-						  if (is_pellet1) active_pellet <= 1'b0;
-						  else if (is_pellet2) active_pellet <= 1'b1;
-					end
-					
-					if ((pellets_eaten + super_pellets_eaten) >= TOTAL_PELLETS) begin
-						  game_won_active <= 1'b1;
-					end
-
-					if (frightened_timer > 9'd0) begin
-						  frightened_timer <= frightened_timer - 1'b1;
-						  if (frightened_timer == 9'd1) begin
-								blinky_scared <= 1'b0;
-								pinky_scared <= 1'b0;
-								inky_scared <= 1'b0;
-								clyde_scared <= 1'b0;
-						  end
-					end
-
-					if (eat_blinky) begin blinky_respawn_timer <= 7'd120; blinky_scared <= 1'b0; end
-					if (eat_pinky) begin pinky_respawn_timer <= 7'd120; pinky_scared <= 1'b0; end
-					if (eat_inky) begin inky_respawn_timer <= 7'd120; inky_scared <= 1'b0; end
-					if (eat_clyde) begin clyde_respawn_timer <= 7'd120; clyde_scared <= 1'b0; end
-
+					if (eat_blinky) begin 
+						blinky_respawn_timer <= 8'd180; 
+						blinky_scared <= 1'b0; 
+						freeze_timer <= 6'd60; end
+						
+					if (eat_pinky) begin 
+						pinky_respawn_timer <= 8'd180; 
+						pinky_scared <= 1'b0; 
+						freeze_timer <= 6'd60; end
+						
+					if (eat_inky) begin 
+						inky_respawn_timer <= 8'd180; 
+						inky_scared <= 1'b0; 
+						freeze_timer <= 6'd60; end
+						
+					if (eat_clyde) begin 
+						clyde_respawn_timer <= 8'd180; 
+						clyde_scared <= 1'b0; 
+						freeze_timer <= 6'd60; end
+						
+						
 					// pulse ghost score reg 
 					if (eat_blinky || eat_pinky || eat_inky || eat_clyde) begin
 						if (active_pellet == 1'b0) begin
@@ -890,59 +891,114 @@ begin
 							end
 						end
 					end
+	  
+					if((started && !game_over_active && (freeze_timer == 6'd0))) begin
+						ghost_anim_timer <= ghost_anim_timer + 1'b1; end
 
-					if (blinky_respawn_timer > 7'd0) blinky_respawn_timer <= blinky_respawn_timer - 1'b1;
-					if (pinky_respawn_timer > 7'd0) pinky_respawn_timer <= pinky_respawn_timer - 1'b1;
-					if (inky_respawn_timer > 7'd0) inky_respawn_timer <= inky_respawn_timer - 1'b1;
-					if (clyde_respawn_timer > 7'd0) clyde_respawn_timer <= clyde_respawn_timer - 1'b1;
+					if(freeze_timer > 6'd0) begin
+						freeze_timer <= freeze_timer - 1'b1; end
+					else begin
+						if(!eaten_pellet[eat_idx] && !no_pellet) begin
+						  eaten_pellet[eat_idx] <= 1'b1;
+						  pellets_eaten <= pellets_eaten + 1'b1; end
+					
+						if(!eaten_super_pellet[eat_idx] && is_super_pellet) begin
+							  eaten_super_pellet[eat_idx] <= 1'b1;
+							  super_pellets_eaten <= super_pellets_eaten + 1'b1;
+							  frightened_timer <= 9'd360;
+							  
+							  blinky_scared <= blinky_release_sig && !blinky_eaten;
+							  pinky_scared <= pinky_release_sig && !pinky_eaten;
+							  inky_scared <= inky_release_sig && !inky_eaten;
+							  clyde_scared <= clyde_release_sig && !clyde_eaten;
+						  
+							  if (is_pellet1) active_pellet <= 1'b0;
+							  else if (is_pellet2) active_pellet <= 1'b1;
+						end
+					
+						if ((pellets_eaten + super_pellets_eaten) >= TOTAL_PELLETS) begin
+							  game_won_active <= 1'b1;
+						end
 
-					if (!started || game_over_active || game_won_active) begin
-						  stagger_timer <= 8'd0;
-					end else if (stagger_timer < 8'd120) begin
-						  stagger_timer <= stagger_timer + 1'b1;
-					end
+						if (frightened_timer > 9'd0) begin
+							  frightened_timer <= frightened_timer - 1'b1;
+							  if (frightened_timer == 9'd1) begin
+									blinky_scared <= 1'b0;
+									pinky_scared <= 1'b0;
+									inky_scared <= 1'b0;
+									clyde_scared <= 1'b0;
+							  end
+						end
+					
+						if (blinky_respawn_timer > 7'd0) blinky_respawn_timer <= blinky_respawn_timer - 1'b1;
+						if (pinky_respawn_timer > 7'd0) pinky_respawn_timer <= pinky_respawn_timer - 1'b1;
+						if (inky_respawn_timer > 7'd0) inky_respawn_timer <= inky_respawn_timer - 1'b1;
+						if (clyde_respawn_timer > 7'd0) clyde_respawn_timer <= clyde_respawn_timer - 1'b1;
 
-					if (death_timer > 7'd1) begin
-						  death_timer <= death_timer - 1'b1;
-					end else if (death_timer == 7'd1) begin
-						  death_timer <= 7'd0;
-						  pacman_x_pos <= 10'd128;
-						  pacman_y_pos <= 10'd56;
-						  stagger_timer <= 8'd0;
-					end else if (pacman_die_collision && !game_over_active) begin
-						  death_timer <= 7'd120;
-						  stagger_timer <= 8'd0;
-						  if (lives > 2'd1) begin
-								  lives <= lives - 1'b1;
-						  end else begin
-								  lives <= 2'd0;
-								  game_over_active <= 1'b1;
-						  end
-					end else if (started && !game_over_active) begin
-						  case(direction)
-								  2'b00: if((pacman_y_pos > 0) && !wall_above)
-												pacman_y_pos <= (pacman_y_pos - 1'b1);
-												
-								  2'b01: if(((pacman_y_pos + PACMAN_SIZE) < (VIRTUAL_PIXEL_HEIGHT - 1'b1)) && !wall_below)
-												pacman_y_pos <= (pacman_y_pos + 1'b1);
-												
-								  2'b10: if((pacman_x_pos > 0) && !wall_left)
-												pacman_x_pos <= (pacman_x_pos - 1'b1);
-												
-								  2'b11: if(((pacman_x_pos + PACMAN_SIZE) < (VIRTUAL_PIXEL_WIDTH - 1'b1)) && !wall_right) 													
-												pacman_x_pos <= (pacman_x_pos + 1'b1);
-						  endcase
+						if (!started || game_over_active || game_won_active) begin
+							  stagger_timer <= 8'd0;
+						end else if (stagger_timer < 8'd120) begin
+							  stagger_timer <= stagger_timer + 1'b1;
+						end
 
-						  if (pacman_y_pos == 1'b0)
-								  pacman_y_pos <= (VIRTUAL_PIXEL_HEIGHT - PACMAN_SIZE - 2'b10);
-						  else if (pacman_y_pos == (VIRTUAL_PIXEL_HEIGHT - PACMAN_SIZE - 1'b1))
-								  pacman_y_pos <= 1'b1;
-					end
-							if (started && !game_over_active && (death_timer == 7'd0)) begin
-									pacman_anim_timer <= pacman_anim_timer + 1'b1;
-							end else begin
-									pacman_anim_timer <= 5'd0; // mouth closed when not moving
-							end
+						if (death_timer > 7'd1) begin
+							  death_timer <= death_timer - 1'b1;
+						end else if (death_timer == 7'd1) begin
+							  death_timer <= 7'd0;
+							  pacman_x_pos <= 10'd128;
+							  pacman_y_pos <= 10'd56;
+							  stagger_timer <= 8'd0;
+							  
+							  blinky_scared <= 1'b0;
+							  pinky_scared <= 1'b0;
+							  inky_scared <= 1'b0;
+							  clyde_scared <= 1'b0;
+							  
+							  if(lives == 2'd0) begin
+							      game_over_active <= 1'b1; end
+									
+						end else if (pacman_die_collision && !game_over_active) begin
+							  death_timer <= 7'd120;
+							  stagger_timer <= 8'd0;
+							  if (lives > 2'd0) begin
+									  lives <= lives - 1'b1; end 
+						end else if (started && !game_over_active) begin
+							  case(direction)
+									  2'b00: if((pacman_y_pos > 0) && !wall_above)
+													pacman_y_pos <= (pacman_y_pos - 1'b1);
+													
+									  2'b01: if(((pacman_y_pos + PACMAN_SIZE) < (VIRTUAL_PIXEL_HEIGHT - 1'b1)) && !wall_below)
+													pacman_y_pos <= (pacman_y_pos + 1'b1);
+													
+									  2'b10: if((pacman_x_pos > 0) && !wall_left)
+													pacman_x_pos <= (pacman_x_pos - 1'b1);
+													
+									  2'b11: if(((pacman_x_pos + PACMAN_SIZE) < (VIRTUAL_PIXEL_WIDTH - 1'b1)) && !wall_right) 													
+													pacman_x_pos <= (pacman_x_pos + 1'b1);
+							  endcase
+
+							  if (pacman_y_pos == 1'b0)
+									  pacman_y_pos <= (VIRTUAL_PIXEL_HEIGHT - PACMAN_SIZE - 2'b10);
+							  else if (pacman_y_pos == (VIRTUAL_PIXEL_HEIGHT - PACMAN_SIZE - 1'b1))
+									  pacman_y_pos <= 1'b1;
+						end
+								if (started && !game_over_active && (death_timer == 7'd0)) begin
+										pacman_anim_timer <= pacman_anim_timer + 1'b1;
+								end else begin
+										pacman_anim_timer <= 5'd0; // mouth closed when not moving
+								end
+								if (started && !game_over_active && (freeze_timer == 6'd0)) begin
+									  if (ghost_anim_timer == 4'd15) begin
+											ghost_anim_timer <= 4'd0;
+											if (ghost_anim_frame == 2'b10)
+												 ghost_anim_frame <= 2'b00;
+											else
+												 ghost_anim_frame <= ghost_anim_frame + 1'b1;
+									  end else begin
+											ghost_anim_timer <= ghost_anim_timer + 1'b1;
+									  end
+								 end
+						end
 			 end					
 			COLOR:
 				begin

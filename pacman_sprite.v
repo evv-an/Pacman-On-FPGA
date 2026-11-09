@@ -44,14 +44,14 @@ module pacman_sprite (
         endcase
     end
 
-    // frame 1: mouth half open (cuts 3 pixels in)
+    // frame 1: mouth half open
     reg [7:0] half_row;
     always @(*) begin
         case (py)
             3'd0: half_row = 8'b00111100;
             3'd1: half_row = 8'b01111110;
             3'd2: half_row = 8'b11111100;
-            3'd3: half_row = 8'b11111000; // cuts 3 pixels in
+            3'd3: half_row = 8'b11111000;
             3'd4: half_row = 8'b11111000;
             3'd5: half_row = 8'b11111100;
             3'd6: half_row = 8'b01111110;
@@ -59,17 +59,17 @@ module pacman_sprite (
         endcase
     end
 
-    // frame 2: mouth wide open (cuts 5-6 pixels in, past the center)
+    // frame 2: mouth wide open (redrawn)
     reg [7:0] wide_row;
     always @(*) begin
         case (py)
             3'd0: wide_row = 8'b00111100;
-            3'd1: wide_row = 8'b01111100; // cuts 2 pixels in
-            3'd2: wide_row = 8'b11110000; // cuts 4 pixels in
-            3'd3: wide_row = 8'b11000000; // deepest point, cuts 6 pixels in
-            3'd4: wide_row = 8'b11100000; // cuts 5 pixels in
-            3'd5: wide_row = 8'b11110000; // cuts 4 pixels in
-            3'd6: wide_row = 8'b01111100;
+            3'd1: wide_row = 8'b01111110;
+            3'd2: wide_row = 8'b11110000;
+            3'd3: wide_row = 8'b11100000;
+            3'd4: wide_row = 8'b11100000;
+            3'd5: wide_row = 8'b11110000;
+            3'd6: wide_row = 8'b01111110;
             3'd7: wide_row = 8'b00111100;
         endcase
     end
@@ -83,8 +83,8 @@ module pacman_sprite (
     always @(*) begin
         case (anim_frame)
             2'b00:        active_pixel = closed_pixel;
-            2'b01, 2'b11: active_pixel = half_pixel;   // half open
-            2'b10:        active_pixel = wide_pixel;   // wide open
+            2'b01, 2'b11: active_pixel = half_pixel;
+            2'b10:        active_pixel = wide_pixel;
         endcase
     end
 
