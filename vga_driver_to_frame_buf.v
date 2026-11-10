@@ -137,11 +137,51 @@ pacman_sprite pacman_render(
 	 .anim_frame(anim_frame),
     .color(raw_pacman_color));
 
-wire pacman_visible = (death_timer == 7'd0) || death_timer[3];
-wire [23:0] pacman_color = pacman_visible ? raw_pacman_color : 24'h000000;
+wire player_visible = (death_timer == 7'd0) || death_timer[3];
+wire [23:0] active_player_color = easter_egg_active ? mario_color : raw_pacman_color;
+wire [23:0] final_player_color  = player_visible ? active_player_color : 24'h000000;
+
+// text drawing
+wire [23:0] game_over_color;
+game_over_text game_over_render_inst(
+    .tile_x_idx(tile_x_idx),
+    .tile_y_idx(tile_y_idx),
+    .draw_x(draw_x[2:0]),
+    .draw_y(draw_y[2:0]),
+    .game_over_active(game_over_active),
+    .color(game_over_color));
 	 
+wire [23:0] game_won_color;
+game_won_text game_won_render_inst(
+    .tile_x_idx(tile_x_idx),
+    .tile_y_idx(tile_y_idx),
+    .draw_x(draw_x[2:0]),
+    .draw_y(draw_y[2:0]),
+    .game_won_active(game_won_active),
+    .color(game_won_color));
+	 
+//easter egg stuff
+wire [23:0] mario_color;
+mario_sprite mario_render_inst(
+    .draw_x(draw_x[2:0]),
+    .draw_y(draw_y[2:0]),
+    .direction(direction),
+    .color(mario_color)
+);
+
+wire [23:0] goomba_color;
+goomba_sprite goomba_render_inst(
+    .draw_x(draw_x[2:0]),
+    .draw_y(draw_y[2:0]),
+    .anim_frame(ghost_anim_frame),
+    .is_scared(active_is_frightened),
+    .color(goomba_color)
+);
+
+
+
 //pellet system logic & registers 
-parameter TOTAL_PELLETS = 13'd116;
+parameter TOTAL_PELLETS = 13'd116; //116 pellets (114+2)
 reg [299:0] eaten_pellet;
 reg [12:0] pellets_eaten; //counter
 reg [12:0] super_pellets_eaten; //counter
@@ -335,6 +375,7 @@ scared_ghost_sprite scared_render_inst(
 //ghost feet animations
 reg [3:0] ghost_anim_timer;
 reg [1:0] ghost_anim_frame;
+reg easter_egg_active;
 
 
 //ghost scared tracking logic (cleared individually when eaten)
@@ -594,14 +635,17 @@ end
 
 reg [23:0] final_ghost_color;
 always @(*) begin
-    if (active_is_eaten) begin
-        final_ghost_color = raw_ghost_color;   // render normal ghost sprite inside cage during delay
+    if (easter_egg_active) begin
+        final_ghost_color = goomba_color;
+    end else if (active_is_eaten) begin
+        final_ghost_color = raw_ghost_color;
     end else if (active_is_frightened) begin
-        final_ghost_color = scared_raw_color;  // render scared sprite only if active ghost is frightened
+        final_ghost_color = scared_raw_color;
     end else begin
-        final_ghost_color = raw_ghost_color;   // standard directional ghost sprite
+        final_ghost_color = raw_ghost_color;
     end
 end
+
 
 reg [9:0] draw_x;
 reg [9:0] draw_y;
@@ -769,6 +813,7 @@ begin
 		
 		stagger_timer <= 8'd0;
 		freeze_timer <= 6'd0;
+		easter_egg_active <= 1'b0;
 		
 		ghost_select <= 1'b0;
 		
@@ -891,7 +936,11 @@ begin
 							end
 						end
 					end
-	  
+				
+					if (pellet1_ghost_count == 13'd4 || pellet2_ghost_count == 13'd4) begin
+								easter_egg_active <= 1'b1; end
+															
+					
 					if((started && !game_over_active && (freeze_timer == 6'd0))) begin
 						ghost_anim_timer <= ghost_anim_timer + 1'b1; end
 
@@ -1001,22 +1050,21 @@ begin
 						end
 			 end					
 			COLOR:
-				begin
-					the_vga_draw_frame_write_mem_address <= ((pacman_x_pos + draw_x) * VIRTUAL_PIXEL_HEIGHT) + (pacman_y_pos + draw_y); 								
-					the_vga_draw_frame_write_mem_data <= pacman_color;
-					the_vga_draw_frame_write_a_pixel <= 1'b1;
+				 begin
+					  the_vga_draw_frame_write_mem_address <= ((pacman_x_pos + draw_x) * VIRTUAL_PIXEL_HEIGHT) + (pacman_y_pos + draw_y);							
+					  the_vga_draw_frame_write_mem_data <= final_player_color;
+					  the_vga_draw_frame_write_a_pixel <= 1'b1;
 
-					if(draw_x < PACMAN_SIZE - 1)
-						draw_x <= draw_x + 1'b1;
-					else begin
-						draw_x <= 10'd0;
-						if(draw_y < PACMAN_SIZE - 1)
-							draw_y <= draw_y + 1'b1;
-						else
-							draw_y <= 10'd0;
-					end
-				end
-				
+					  if(draw_x < PACMAN_SIZE - 1)
+							draw_x <= draw_x + 1'b1;
+					  else begin
+							draw_x <= 10'd0;
+							if(draw_y < PACMAN_SIZE - 1)
+								 draw_y <= draw_y + 1'b1;
+							else
+								 draw_y <= 10'd0;
+					  end
+				 end
 			COLOR_GHOST: begin
 					 the_vga_draw_frame_write_mem_address <= ((active_ghost_x + draw_x) * VIRTUAL_PIXEL_HEIGHT) + (active_ghost_y + draw_y);
 					 the_vga_draw_frame_write_mem_data <= final_ghost_color;
@@ -1041,7 +1089,14 @@ begin
 					en_pellet1 <= 1'b0;
 					en_pellet2 <= 1'b0;
 					the_vga_draw_frame_write_mem_address <= (({11'd0, tile_x_idx} * 16'd8 + {6'd0, draw_x}) * VIRTUAL_PIXEL_HEIGHT) + ({12'd0, tile_y_idx} * 16'd8 + {6'd0, draw_y});				  
-					the_vga_draw_frame_write_mem_data <= (is_gate_bar ? 24'hFFB8FF : (is_wall_border ? 24'h0000FF : (draw_pellet ? 24'hFFB8AE : (draw_super_pellet ? 24'hFFB8AE : 24'h000000))));
+					
+					if (game_over_color != 24'h000000) begin
+						the_vga_draw_frame_write_mem_data <= game_over_color;
+					end else if (game_won_color != 24'h000000) begin
+						the_vga_draw_frame_write_mem_data <= game_won_color;
+					end else begin
+						the_vga_draw_frame_write_mem_data <= (is_gate_bar ? 24'hFFB8FF : (is_wall_border ? (easter_egg_active ? 24'h00FF00 :24'h0000FF) : (draw_pellet ? (easter_egg_active ? 25'hFFBF00 : 24'hFFB8AE) : (draw_super_pellet ? 24'hFFB8AE : 24'h000000)))); end
+					
 					the_vga_draw_frame_write_a_pixel <= 1'b1;
 						
 					if (draw_x < 10'd7) begin
