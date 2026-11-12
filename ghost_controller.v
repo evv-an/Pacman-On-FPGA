@@ -22,6 +22,7 @@ module ghost_controller(
 
     reg [1:0] speed_counter;
     reg released;
+	 reg exiting;
 
     // tile lookups for ghosts
     wire [4:0] next_tile_x_left = (ghost_x_pos > 0) ? ((ghost_x_pos - 1'b1) >> 3) : 5'd0;
@@ -82,21 +83,38 @@ module ghost_controller(
     // movement and release logic
     always @(posedge clk or negedge rst) begin
         if (!rst) begin
-            ghost_x_pos <= spawn_x;
-            ghost_y_pos <= spawn_y;
+            ghost_x_pos     <= spawn_x;
+            ghost_y_pos     <= spawn_y;
             ghost_direction <= initial_direction;
-            released <= 1'b0;
-            speed_counter <= 2'b00;
+            released        <= 1'b0;
+            exiting         <= 1'b0;
+            speed_counter   <= 2'b00;
         end else if (started && frame_tick) begin
-            if (!released) begin
-                ghost_x_pos <= spawn_x;
-                ghost_y_pos <= spawn_y;
-
-                // release trigger (teleport to blinky spawnpoint once condition is met)
+            if (!released && !exiting) begin
+                // waits in the cage until it gets released
                 if (release_signal) begin
-                    ghost_x_pos <= release_x;
-                    ghost_y_pos <= release_y;
-                    released <= 1'b1;
+                    exiting       <= 1'b1;
+                    speed_counter <= 2'b00;
+                end
+            end else if (exiting) begin
+                speed_counter <= speed_counter + 1'b1;
+
+                // walks out through the gate slowly (1px every 4 frame ticks)
+                if (speed_counter == 2'b00) begin
+                    if (ghost_y_pos < release_y) begin
+                        ghost_direction <= 2'b01;
+                        ghost_y_pos     <= ghost_y_pos + 1'b1;
+                    end else if (ghost_y_pos > release_y) begin
+                        ghost_direction <= 2'b00;
+                        ghost_y_pos     <= ghost_y_pos - 1'b1;
+                    end else if (ghost_x_pos > release_x) begin
+                        ghost_direction <= 2'b10;
+                        ghost_x_pos     <= ghost_x_pos - 1'b1;
+                    end else begin
+                        // made it outside the gate
+                        exiting  <= 1'b0;
+                        released <= 1'b1;
+                    end
                 end
             end else begin
                 speed_counter <= speed_counter + 1'b1;
@@ -108,7 +126,7 @@ module ghost_controller(
                     case (next_direction)
                         2'b00: if (!wall_above) ghost_y_pos <= ghost_y_pos - 1'b1;
                         2'b01: if (!wall_below) ghost_y_pos <= ghost_y_pos + 1'b1;
-                        2'b10: if (!wall_left) ghost_x_pos <= ghost_x_pos - 1'b1;
+                        2'b10: if (!wall_left)  ghost_x_pos <= ghost_x_pos - 1'b1;
                         2'b11: if (!wall_right) ghost_x_pos <= ghost_x_pos + 1'b1;
                     endcase
 

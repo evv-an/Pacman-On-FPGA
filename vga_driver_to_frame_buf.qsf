@@ -887,6 +887,7 @@ set_instance_assignment -name PACKAGE_SKEW_COMPENSATION OFF -to HPS_DDR3_CK_P
 set_instance_assignment -name PACKAGE_SKEW_COMPENSATION OFF -to HPS_DDR3_CK_N
 
 
+set_global_assignment -name VERILOG_FILE life_display.v
 set_global_assignment -name VERILOG_FILE game_over_text.v
 set_global_assignment -name VERILOG_FILE game_won_text.v
 set_global_assignment -name VERILOG_FILE ghost_reg.v

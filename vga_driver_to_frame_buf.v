@@ -123,7 +123,16 @@ reg [1:0] lives;
 reg game_over_active;
 reg game_won_active; 
 reg [6:0] death_timer;
-assign LEDR[2:0] = lives; //case statement to fix
+
+// onscreen life counter drawing
+reg [1:0]lives_idx;
+wire [23:0]lives_raw_color;
+wire [9:0] lives_x = 10'd153;
+wire [9:0] lives_y = 10'd105 - ({8'd0, lives_idx} * 10'd10);
+life_display life_display_render(
+    .draw_x(draw_x[2:0]),
+    .draw_y(draw_y[2:0]),
+    .color(lives_raw_color));
 
 
 //pacman drawing & animations
@@ -675,7 +684,8 @@ parameter START       = 4'b0000,
 			 DRAW_WALL   = 4'b0111,
 			 SYNC_HIGH   = 4'b1000, //waits for screen to start scanning
 			 COLOR_GHOST = 4'b1001,
-			 GAME_OVER   = 4'b1010;
+			 GAME_OVER   = 4'b1010,
+			 DRAW_LIVES  = 4'b1011;
 			
 			
 //joystick wires
@@ -760,8 +770,22 @@ begin
 				NS = COLOR;
 		end
 		
-		COLOR_GHOST: NS = ((draw_x == PACMAN_SIZE - 1) && (draw_y == PACMAN_SIZE - 1) && (ghost_select == 2'b11)) ? ((game_over_active || game_won_active) ? GAME_OVER : SYNC_HIGH) : COLOR_GHOST;
-			
+		COLOR_GHOST:
+		begin
+			if ((draw_x == PACMAN_SIZE - 1) && (draw_y == PACMAN_SIZE - 1) && (ghost_select == 2'b11))
+				NS = DRAW_LIVES;
+			else
+				NS = COLOR_GHOST;
+		end
+		
+		DRAW_LIVES: 
+		begin
+			if ((draw_x == 10'd5) && (draw_y == 10'd7) && (lives_idx == 2'd2))
+				NS = (game_over_active || game_won_active) ? GAME_OVER : SYNC_HIGH;
+			else
+				NS = DRAW_LIVES;
+		end
+
 		DRAW_WALL:
 		begin 
 			if ((draw_x == 10'd7) && (draw_y == 10'd7) && (tile_x_idx == 5'd19) && (tile_y_idx == 4'd14))
@@ -1083,7 +1107,26 @@ begin
 						  end
 					 end
 				end
+			DRAW_LIVES: begin
+					the_vga_draw_frame_write_mem_address <= ((lives_x + draw_x) * VIRTUAL_PIXEL_HEIGHT) + (lives_y + draw_y);
+					the_vga_draw_frame_write_mem_data    <= ((lives_idx < lives) && player_visible) ? lives_raw_color : 24'h000000;
+					the_vga_draw_frame_write_a_pixel     <= 1'b1;
 
+					if (draw_x < 10'd5) begin
+						draw_x <= draw_x + 1'b1;
+					end else begin
+						draw_x <= 10'd0;
+						if (draw_y < 10'd7) begin
+							draw_y <= draw_y + 1'b1;
+						end else begin
+							draw_y <= 10'd0;
+							if (lives_idx < 2'd2)
+								lives_idx <= lives_idx + 1'b1;
+							else
+								lives_idx <= 2'd0;
+						end
+					end
+				end
 			DRAW_WALL: 
 				begin
 					en_pellet1 <= 1'b0;
@@ -1095,7 +1138,7 @@ begin
 					end else if (game_won_color != 24'h000000) begin
 						the_vga_draw_frame_write_mem_data <= game_won_color;
 					end else begin
-						the_vga_draw_frame_write_mem_data <= (is_gate_bar ? 24'hFFB8FF : (is_wall_border ? (easter_egg_active ? 24'h00FF00 :24'h0000FF) : (draw_pellet ? (easter_egg_active ? 25'hFFBF00 : 24'hFFB8AE) : (draw_super_pellet ? 24'hFFB8AE : 24'h000000)))); end
+						the_vga_draw_frame_write_mem_data <= (is_gate_bar ? 24'hFFB8FF : (is_wall_border ? (easter_egg_active ? 24'h00FF00 :24'h0000FF) : (draw_pellet ? (easter_egg_active ? 25'hEBB434 : 24'hFFB8AE) : (draw_super_pellet ? 24'hFFB8AE : 24'h000000)))); end
 					
 					the_vga_draw_frame_write_a_pixel <= 1'b1;
 						
