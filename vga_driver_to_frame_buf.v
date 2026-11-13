@@ -689,10 +689,10 @@ parameter START       = 4'b0000,
 			
 			
 //joystick wires
-wire joy_up = KEY[2] && GPIO_0[0];
-wire joy_down = KEY[1] && GPIO_0[1];
-wire joy_left =  KEY[3] && GPIO_0[2];
-wire joy_right = KEY[0] && GPIO_0[3];
+wire joy_up = KEY[0] && GPIO_0[0];
+wire joy_down = KEY[3] && GPIO_0[1];
+wire joy_left =  KEY[1] && GPIO_0[2];
+wire joy_right = KEY[2] && GPIO_0[3];
 
 //key latching logic
 always @(posedge clk or negedge rst) begin
@@ -1109,7 +1109,7 @@ begin
 				end
 			DRAW_LIVES: begin
 					the_vga_draw_frame_write_mem_address <= ((lives_x + draw_x) * VIRTUAL_PIXEL_HEIGHT) + (lives_y + draw_y);
-					the_vga_draw_frame_write_mem_data    <= ((lives_idx < lives) && player_visible) ? lives_raw_color : 24'h000000;
+					the_vga_draw_frame_write_mem_data    <= (((lives_idx < lives) || (lives_idx == lives && death_timer > 0))  && player_visible) ? lives_raw_color : 24'h000000;
 					the_vga_draw_frame_write_a_pixel     <= 1'b1;
 
 					if (draw_x < 10'd5) begin
