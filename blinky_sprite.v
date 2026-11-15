@@ -1,43 +1,108 @@
-module blinky_sprite(input [2:0] draw_x, input [2:0] draw_y, input [1:0] direction, input [1:0] anim_frame, output reg [23:0] color);
-	
-	parameter RED   = 24'hFF0000;
-	parameter WHITE = 24'hFFFFFF;
-	parameter BLUE  = 24'h0000FF;
-	parameter BLACK = 24'h000000;
-	
-	always @ (*) begin
-    case ({draw_x, 3'd7 - draw_y})
-        6'b000010, 6'b000011, 6'b000100, 6'b000101: color = RED;
-        6'b001001, 6'b001010, 6'b001011, 6'b001100, 6'b001101, 6'b001110: color = RED;
-        6'b010000, 6'b010001, 6'b010010, 6'b010011, 6'b010100, 6'b010101, 6'b010110, 6'b010111: color = RED;
+module blinky_sprite(
+    input [9:0] x,
+    input [9:0] y,
+    input active_pixels,
+    input [9:0] blinky_x_pos, //virtual grid x
+    input [9:0] blinky_y_pos, //virtual grid y
+    input [1:0] direction, //up > down > left > right
+    input [1:0] anim_frame,
+    output reg [23:0] color
+);
 
-        // top eye row
-        6'b011000, 6'b011011, 6'b011100, 6'b011111: color = RED;
-        6'b011001: color = (direction == 2'b00 || direction == 2'b10) ? BLUE : WHITE; 
-        6'b011010: color = (direction == 2'b11) ? BLUE : WHITE;                       
-        6'b011101: color = (direction == 2'b00 || direction == 2'b10) ? BLUE : WHITE; 
-        6'b011110: color = (direction == 2'b11) ? BLUE : WHITE;                       
+    parameter RED = 24'hFF0000;
+    parameter WHITE = 24'hFFFFFF;
+    parameter BLUE = 24'h0000FF;
+    parameter BLACK = 24'h000000;
 
-        // bottom eye row
-        6'b100000, 6'b100011, 6'b100100, 6'b100111: color = RED;
-        6'b100001: color = (direction == 2'b01) ? BLUE : WHITE;                        
-        6'b100010: color = WHITE;
-        6'b100101: color = (direction == 2'b01) ? BLUE : WHITE;                        
-        6'b100110: color = WHITE;
+    //convert virtual coordinates to physical coordinates
+    wire [9:0] blinky_left = {blinky_x_pos[7:0], 2'b00};
+    wire [9:0] blinky_top = {blinky_y_pos[7:0], 2'b00};
 
-        6'b101000, 6'b101001, 6'b101010, 6'b101011, 6'b101100, 6'b101101, 6'b101110, 6'b101111: color = RED;
-        6'b110000, 6'b110001, 6'b110010, 6'b110011, 6'b110100, 6'b110101, 6'b110110, 6'b110111: color = RED;
+    //checks if drawing inside blinky
+    wire inside_blinky = active_pixels && (x >= blinky_left) && (x < blinky_left + 10'd32) && (y >= blinky_top) && (y < blinky_top + 10'd32);
 
-        // feet
-        6'b111000: color = (anim_frame == 2'b00 || anim_frame == 2'b10) ? RED : BLACK;
-        6'b111001: color = RED;
-        6'b111010: color = (anim_frame == 2'b01 || anim_frame == 2'b10) ? RED : BLACK;
-        6'b111011: color = (anim_frame == 2'b00) ? RED : BLACK;
-        6'b111100: color = (anim_frame == 2'b00) ? RED : BLACK;
-        6'b111101: color = (anim_frame == 2'b01 || anim_frame == 2'b10) ? RED : BLACK;
-        6'b111110: color = RED;
-        6'b111111: color = (anim_frame == 2'b00 || anim_frame == 2'b10) ? RED : BLACK;
-        default: color = BLACK;
-    endcase
-end
+    wire [4:0] offset_x = x - blinky_left;
+    wire [4:0] offset_y = y - blinky_top;
+    wire [3:0] sprite_x = offset_x[4:1];
+    wire [3:0] sprite_y = offset_y[4:1];
+
+    //rotate coordinates 90 degrees ccw
+    wire [3:0] rotated_x = 4'd15 - sprite_y;
+    wire [3:0] rotated_y = sprite_x;
+    wire [3:0] bit_index = 4'd15 - rotated_x;
+
+    reg [15:0] body_row_bits;
+    reg [15:0] eye_white_row_bits;
+    reg [15:0] pupil_blue_row_bits;
+
+    always @(*) begin
+        case (rotated_y)
+            4'd0: body_row_bits = 16'b0000011111100000;
+            4'd1: body_row_bits = 16'b0001111111111000;
+            4'd2: body_row_bits = 16'b0011111111111100;
+            4'd3: body_row_bits = 16'b0111111111111110;
+            4'd4: body_row_bits = 16'b0111111111111110;
+            4'd5: body_row_bits = 16'b1111111111111111;
+            4'd6: body_row_bits = 16'b1111111111111111;
+            4'd7: body_row_bits = 16'b1111111111111111;
+            4'd8: body_row_bits = 16'b1111111111111111;
+            4'd9: body_row_bits = 16'b1111111111111111;
+            4'd10: body_row_bits = 16'b1111111111111111;
+            4'd11: body_row_bits = 16'b1111111111111111;
+            4'd12: body_row_bits = 16'b1111111111111111;
+            4'd13: body_row_bits = 16'b1111111111111111;
+            4'd14: body_row_bits = (anim_frame[0] == 1'b0) ? 16'b1111001111001111 : 16'b1111001111001111;
+            4'd15: body_row_bits = (anim_frame[0] == 1'b0) ? 16'b0110000110000110 : 16'b1111001111001111;
+            default: body_row_bits = 16'b0000000000000000;
+        endcase
+
+        case (rotated_y)
+            4'd5: eye_white_row_bits = 16'b0000110000110000;
+            4'd6: eye_white_row_bits = 16'b0001111001111000;
+            4'd7: eye_white_row_bits = 16'b0001111001111000;
+            4'd8: eye_white_row_bits = 16'b0001111001111000;
+            4'd9: eye_white_row_bits = 16'b0000000000000000;
+            default: eye_white_row_bits = 16'b0000000000000000;
+        endcase
+
+        pupil_blue_row_bits = 16'b0000000000000000;
+        case (direction)
+            2'b00: begin //up
+                case (rotated_y)
+                    4'd5: pupil_blue_row_bits = 16'b0000110000110000;
+                    4'd6: pupil_blue_row_bits = 16'b0000110000110000;
+                endcase
+            end
+            2'b01: begin //down
+                case (rotated_y)
+                    4'd7: pupil_blue_row_bits = 16'b0000110000110000;
+                    4'd8: pupil_blue_row_bits = 16'b0000110000110000;
+                endcase
+            end
+            2'b10: begin //left
+                case (rotated_y)
+                    4'd6: pupil_blue_row_bits = 16'b0001100001100000;
+                    4'd7: pupil_blue_row_bits = 16'b0001100001100000;
+                endcase
+            end
+            2'b11: begin //right
+                case (rotated_y)
+                    4'd6: pupil_blue_row_bits = 16'b0000011000011000;
+                    4'd7: pupil_blue_row_bits = 16'b0000011000011000;
+                endcase
+            end
+        endcase
+
+        if (!inside_blinky)
+            color = BLACK;
+        else if (pupil_blue_row_bits[bit_index])
+            color = BLUE;
+        else if (eye_white_row_bits[bit_index])
+            color = WHITE;
+        else if (body_row_bits[bit_index])
+            color = RED;
+        else
+            color = BLACK;
+    end
+
 endmodule

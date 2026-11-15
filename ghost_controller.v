@@ -2,6 +2,7 @@ module ghost_controller(
     input clk,
     input rst,
     input started,
+	 input level,
     input release_signal,          // 1'b1 when release condition is met
     input [9:0] spawn_x,           // initial cage spawn x position
     input [9:0] spawn_y,           // initial cage spawn y position 
@@ -40,14 +41,14 @@ module ghost_controller(
     wire wall_left_top, wall_left_down;
     wire wall_right_top, wall_right_down;
 
-    tilemap_rom tile_up_left(.tile_x(curr_tile_x_left), .tile_y(next_tile_y_top), .is_wall(wall_up_left));
-    tilemap_rom tile_up_right(.tile_x(curr_tile_x_right), .tile_y(next_tile_y_top), .is_wall(wall_up_right));
-    tilemap_rom tile_down_left(.tile_x(curr_tile_x_left), .tile_y(next_tile_y_down), .is_wall(wall_down_left));
-    tilemap_rom tile_down_right(.tile_x(curr_tile_x_right), .tile_y(next_tile_y_down), .is_wall(wall_down_right));
-    tilemap_rom tile_left_top(.tile_x(next_tile_x_left), .tile_y(curr_tile_y_top), .is_wall(wall_left_top));
-    tilemap_rom tile_left_down(.tile_x(next_tile_x_left), .tile_y(curr_tile_y_down), .is_wall(wall_left_down));
-    tilemap_rom tile_right_top(.tile_x(next_tile_x_right), .tile_y(curr_tile_y_top), .is_wall(wall_right_top));
-    tilemap_rom tile_right_down(.tile_x(next_tile_x_right), .tile_y(curr_tile_y_down), .is_wall(wall_right_down));
+    tilemap_rom tile_up_left(.level(level), .tile_x(curr_tile_x_left), .tile_y(next_tile_y_top), .is_wall(wall_up_left));
+    tilemap_rom tile_up_right(.level(level), .tile_x(curr_tile_x_right), .tile_y(next_tile_y_top), .is_wall(wall_up_right));
+    tilemap_rom tile_down_left(.level(level), .tile_x(curr_tile_x_left), .tile_y(next_tile_y_down), .is_wall(wall_down_left));
+    tilemap_rom tile_down_right(.level(level), .tile_x(curr_tile_x_right), .tile_y(next_tile_y_down), .is_wall(wall_down_right));
+    tilemap_rom tile_left_top(.level(level), .tile_x(next_tile_x_left), .tile_y(curr_tile_y_top), .is_wall(wall_left_top));
+    tilemap_rom tile_left_down(.level(level), .tile_x(next_tile_x_left), .tile_y(curr_tile_y_down), .is_wall(wall_left_down));
+    tilemap_rom tile_right_top(.level(level), .tile_x(next_tile_x_right), .tile_y(curr_tile_y_top), .is_wall(wall_right_top));
+    tilemap_rom tile_right_down(.level(level), .tile_x(next_tile_x_right), .tile_y(curr_tile_y_down), .is_wall(wall_right_down));
 
     wire wall_above = wall_up_left | wall_up_right;
     wire wall_below = wall_down_left | wall_down_right;
