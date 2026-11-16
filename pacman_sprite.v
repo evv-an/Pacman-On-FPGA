@@ -2,6 +2,7 @@ module pacman_sprite(
     input [9:0] x,             
     input [9:0] y,             
     input active_pixels, 
+    input level,
     input [9:0] pacman_x_pos,  //virtual grid x
     input [9:0] pacman_y_pos,  //virtual grid y
     input [1:0] direction,     //up > down > left > right
@@ -14,7 +15,7 @@ module pacman_sprite(
     wire [9:0] pacman_top = {pacman_y_pos[7:0], 2'b00};
 
     //checks if drawing inside pacman
-    wire inside_pacman = active_pixels && (x >= pacman_left) && (x < pacman_left + 10'd32) && (y >= pacman_top)  && (y < pacman_top  + 10'd32);
+    wire inside_pacman = active_pixels && (x >= pacman_left) && (x < pacman_left + 10'd32) && (y >= pacman_top) && (y < pacman_top + 10'd32);
 
     wire [4:0] offset_x = x - pacman_left;
     wire [4:0] offset_y = y - pacman_top;
@@ -45,6 +46,15 @@ module pacman_sprite(
             end
         endcase
     end
+
+    // ms pacman bow on the back of the head for level 2 (uses the rotated coords so it turns with pacman)
+    wire is_bow_knot = (rotated_x >= 4'd2 && rotated_x <= 4'd3) && (rotated_y >= 4'd2 && rotated_y <= 4'd3);
+    wire is_bow_ribbon = ((rotated_y == 4'd0) && (rotated_x >= 4'd3 && rotated_x <= 4'd4)) ||
+                         ((rotated_y == 4'd1) && (rotated_x >= 4'd3 && rotated_x <= 4'd5)) ||
+                         ((rotated_y == 4'd2) && (rotated_x >= 4'd4 && rotated_x <= 4'd5)) ||
+                         ((rotated_y == 4'd3) && (rotated_x <= 4'd1)) ||
+                         ((rotated_y == 4'd4) && (rotated_x <= 4'd2)) ||
+                         ((rotated_y == 4'd5) && (rotated_x >= 4'd1 && rotated_x <= 4'd2));
 
     reg [15:0] row_bits;
 
@@ -119,7 +129,16 @@ module pacman_sprite(
             default: row_bits = 16'b0000000000000000;
         endcase
 
-        color = (inside_pacman && row_bits[4'd15 - rotated_x]) ? 24'hFFFF00 : 24'h000000;
+        if (!inside_pacman)
+            color = 24'h000000;
+        else if (level && is_bow_knot)
+            color = 24'hD04B42;
+        else if (level && is_bow_ribbon)
+            color = 24'hEC594F;
+        else if (row_bits[4'd15 - rotated_x])
+            color = 24'hFFFF00;
+        else
+            color = 24'h000000;
     end
 
 endmodule

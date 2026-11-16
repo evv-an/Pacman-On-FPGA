@@ -3,6 +3,7 @@ module vga_driver_to_frame_buf(
 	output [6:0]HEX1,
 	output [6:0]HEX2,
 	output [6:0]HEX3,
+	output [6:0]HEX4,
 	output VGA_BLANK_N,
 	output [7:0]VGA_B,
 	output VGA_CLK,
@@ -130,26 +131,31 @@ wire is_outer_wall = (tile_x_idx == 5'd0) || (tile_x_idx == 5'd19) ||
                      ((tile_y_idx >= 4'd12) && wall_below_render);
 
 reg [15:0] corner_pattern;
+reg [15:0] fill_pattern;
 always @(*) begin
-    if (horizontal_edge_open && vertical_edge_open)
-        corner_pattern = is_outer_wall ? 16'b1101_1001_0010_1100  // outer double rounded corner
-                                       : 16'b0001_0001_0010_1100; // outer single rounded corner
-    else if (horizontal_edge_open)
-        corner_pattern = is_outer_wall ? 16'b0101_0101_0101_0101  // vertical double line
-                                       : 16'b0001_0001_0001_0001; // vertical single line
-    else if (vertical_edge_open)
-        corner_pattern = is_outer_wall ? 16'b0000_1111_0000_1111  // horizontal double line
-                                       : 16'b0000_0000_0000_1111; // horizontal single line
-    else if (diagonal_path_open)
-        corner_pattern = is_outer_wall ? 16'b0000_0001_0010_0101  // inner double rounded corner
-                                       : 16'b0000_0000_0000_0001; // inner single corner
-    else
-        corner_pattern = 16'b0000_0000_0000_0000; // solid wall interior
+    if (horizontal_edge_open && vertical_edge_open) begin
+        corner_pattern = is_outer_wall ? 16'b1101_1001_0010_1100 : 16'b0001_0001_0010_1100;
+        fill_pattern = is_outer_wall ? 16'b0010_0110_1100_0000 : 16'b1110_1110_1100_0000;
+    end else if (horizontal_edge_open) begin
+        corner_pattern = is_outer_wall ? 16'b0101_0101_0101_0101 : 16'b0001_0001_0001_0001;
+        fill_pattern = is_outer_wall ? 16'b0010_0010_0010_0010 : 16'b1110_1110_1110_1110;
+    end else if (vertical_edge_open) begin
+        corner_pattern = is_outer_wall ? 16'b0000_1111_0000_1111 : 16'b0000_0000_0000_1111;
+        fill_pattern = is_outer_wall ? 16'b0000_0000_1111_0000 : 16'b1111_1111_1111_0000;
+    end else if (diagonal_path_open) begin
+        corner_pattern = is_outer_wall ? 16'b0000_0001_0010_0101 : 16'b0000_0000_0000_0001;
+        fill_pattern = is_outer_wall ? 16'b0000_0000_0001_0010 : 16'b1111_1111_1111_1110;
+    end else begin
+        corner_pattern = 16'b0000_0000_0000_0000;
+        fill_pattern = is_outer_wall ? 16'b0000_0000_0000_0000 : 16'b1111_1111_1111_1111;
+    end
 end
 
+wire outside_rounded_corner = horizontal_edge_open && vertical_edge_open && (quadrant_index == 4'd0 || quadrant_index == 4'd1 || quadrant_index == 4'd4);
 wire is_wall_border = !is_gate_tile && is_draw_wall && corner_pattern[quadrant_index];
+wire is_wall_fill = level && !is_gate_tile && is_draw_wall && fill_pattern[quadrant_index];
 
-wire [23:0] wall_border_color = flash_walls_white ? 24'hFFFFFF : (easter_egg1_active ? 24'h00FF00 : (level ? 24'hFF55AA : 24'h0000FF));
+wire [23:0] wall_border_color = flash_walls_white ? 24'hFFFFFF : (easter_egg1_active ? 24'h00FF00 : (level ? 24'hD80038 : 24'h0000FF));
 
 // levels
 
@@ -186,6 +192,7 @@ pacman_sprite pacman_render(
     .pacman_x_pos(pacman_x_pos),
     .pacman_y_pos(pacman_y_pos),
     .direction(direction),
+	 .level(level),
     .anim_frame(anim_frame),
     .color(raw_pacman_color)
 );
@@ -275,7 +282,7 @@ wire [15:0] total_ghost_score = pellet1_score_out + pellet2_score_out;
 
 ghost_reg pellet1_score_reg (
     .clk(clk),
-    .rst(rst),
+    .rst(rst && !level_transition),
     .en(en_pellet1),
     .ghost_count(pellet1_ghost_count),
     .ghost_score(pellet1_score_out)
@@ -283,7 +290,7 @@ ghost_reg pellet1_score_reg (
 
 ghost_reg pellet2_score_reg (
     .clk(clk),
-    .rst(rst),
+    .rst(rst && !level_transition),
     .en(en_pellet2),
     .ghost_count(pellet2_ghost_count),
     .ghost_score(pellet2_score_out)
@@ -564,20 +571,27 @@ wire [9:0] inky_left = {inky_x_pos[7:0], 2'b00};
 wire [9:0] inky_top  = {inky_y_pos[7:0], 2'b00};
 wire inside_inky_box = (x >= inky_left) && (x < inky_left + 10'd32) && (y >= inky_top) && (y < inky_top + 10'd32);
 
+wire [9:0] clyde_left = {clyde_x_pos[7:0], 2'b00};
+wire [9:0] clyde_top  = {clyde_y_pos[7:0], 2'b00};
+wire inside_clyde_box = (x >= clyde_left) && (x < clyde_left + 10'd32) && (y >= clyde_top) && (y < clyde_top + 10'd32);
+
 wire [9:0] goomba_x_pos = inside_blinky_box ? blinky_x_pos :
                           inside_pinky_box  ? pinky_x_pos  :
                           inside_inky_box   ? inky_x_pos   :
-                                              clyde_x_pos;
-
+                          inside_clyde_box  ? clyde_x_pos  :
+                                              10'd640;
+															 
 wire [9:0] goomba_y_pos = inside_blinky_box ? blinky_y_pos :
                           inside_pinky_box  ? pinky_y_pos  :
                           inside_inky_box   ? inky_y_pos   :
-                                              clyde_y_pos;
+                          inside_clyde_box  ? clyde_y_pos  :
+                                              10'd640;
 
 wire goomba_is_scared = inside_blinky_box ? blinky_is_frightened :
                         inside_pinky_box  ? pinky_is_frightened  :
                         inside_inky_box   ? inky_is_frightened   :
-                                            clyde_is_frightened;
+                        inside_clyde_box  ? clyde_is_frightened  :
+                                            1'b0;
 
 wire [23:0] goomba_color;
 goomba_sprite goomba_render_inst(
@@ -606,16 +620,19 @@ scared_goomba_sprite scared_goomba_render_inst(
 wire in_scared_blinky = blinky_is_frightened && inside_blinky_box;
 wire in_scared_pinky  = pinky_is_frightened  && inside_pinky_box;
 wire in_scared_inky   = inky_is_frightened   && inside_inky_box;
+wire in_scared_clyde  = clyde_is_frightened  && inside_clyde_box;
 
 wire [9:0] scared_x_pos = in_scared_blinky ? blinky_x_pos :
                           in_scared_pinky  ? pinky_x_pos  :
                           in_scared_inky   ? inky_x_pos   :
-                                             clyde_x_pos;
+                          in_scared_clyde  ? clyde_x_pos  :
+                                             10'd640;
 
 wire [9:0] scared_y_pos = in_scared_blinky ? blinky_y_pos :
                           in_scared_pinky  ? pinky_y_pos  :
                           in_scared_inky   ? inky_y_pos   :
-                                             clyde_y_pos;
+                          in_scared_clyde  ? clyde_y_pos  :
+                                             10'd640;
 
 wire [23:0] scared_raw_color;
 scared_ghost_sprite scared_render_inst(
@@ -1068,8 +1085,9 @@ begin
 					end else begin
 						the_vga_draw_frame_write_mem_data <= (is_gate_bar ? 24'hFFB8FF :
 																		 (is_wall_border ? wall_border_color :
+																		 (is_wall_fill ? 24'hFFB897 : 
 																		 (draw_pellet ? pellet_color :
-																		 (draw_super_pellet ? (level ? 24'hFFFFFF : 24'hFFB8AE) : 24'h000000)))); end
+																		 (draw_super_pellet ? (level ? 24'hFFFFFF : 24'hFFB8AE) : 24'h000000))))); end
 					
 					the_vga_draw_frame_write_a_pixel <= 1'b1;
 						
@@ -1099,5 +1117,5 @@ begin
 	end
 end
 
-three_decimal_vals_w_neg my_three_decimal_vals_w_neg(saved_pellets_eaten + pellets_eaten, saved_super_pellets_eaten + super_pellets_eaten, saved_ghost_score + total_ghost_score, HEX3, HEX2, HEX1, HEX0);
+three_decimal_vals_w_neg my_three_decimal_vals_w_neg(saved_pellets_eaten + pellets_eaten, saved_super_pellets_eaten + super_pellets_eaten, saved_ghost_score + total_ghost_score, HEX4, HEX3, HEX2, HEX1, HEX0);
 endmodule
