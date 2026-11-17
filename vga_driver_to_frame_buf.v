@@ -155,7 +155,8 @@ wire outside_rounded_corner = horizontal_edge_open && vertical_edge_open && (qua
 wire is_wall_border = !is_gate_tile && is_draw_wall && corner_pattern[quadrant_index];
 wire is_wall_fill = level && !is_gate_tile && is_draw_wall && fill_pattern[quadrant_index];
 
-wire [23:0] wall_border_color = flash_walls_white ? 24'hFFFFFF : (easter_egg1_active ? 24'h00FF00 : (level ? 24'hD80038 : 24'h0000FF));
+wire [23:0] wall_border_color = flash_walls_white ? 24'hFFFFFF : easter_egg1_active ? 24'h00FF00 : easter_egg2_active ? 24'hB848FF : level ? 24'hD80038 : 24'h0000FF;
+wire [23:0] wall_fill_color = easter_egg2_active ? 24'h340C54 : 24'hFFB897;
 
 // levels
 
@@ -175,7 +176,7 @@ reg[15:0] saved_ghost_score;
 
 
 // variables for respawn & lives function
-reg [1:0] lives;
+reg [2:0] lives;
 reg game_over_active;
 reg game_won_active; 
 reg [6:0] death_timer;
@@ -223,7 +224,7 @@ reg [299:0] eaten_pellet;
 reg [12:0] pellets_eaten; //counter
 reg [12:0] super_pellets_eaten; //counter
 reg [299:0] eaten_super_pellet;
-reg [4:0] super_pellet_blink_counter;
+reg [4:0] super_pellet_blink_counter;	
 wire [23:0] pellet_color = easter_egg1_active ? 24'hEBB434 : (level ? 24'hFFFFFF : 24'hFFB8AE);
 
 wire[4:0] pacman_center_tile_x = (pacman_x_pos + 10'd4) >> 3; //knows when pacman hits center of tile
@@ -371,6 +372,7 @@ wire is_frightened = (frightened_timer > 9'd0);
 reg [3:0] ghost_anim_timer;
 reg [1:0] ghost_anim_frame;
 reg easter_egg1_active;
+reg easter_egg2_active;
 
 
 //ghost scared tracking logic (cleared individually when eaten)
@@ -421,6 +423,7 @@ wire eat_blinky = blinky_is_frightened && blinky_hit && !blinky_eaten;
 wire eat_pinky  = pinky_is_frightened  && pinky_hit  && !pinky_eaten;
 wire eat_inky   = inky_is_frightened   && inky_hit   && !inky_eaten;
 wire eat_clyde  = clyde_is_frightened  && clyde_hit  && !clyde_eaten;
+wire [2:0] ghosts_eaten_now = {2'd0, eat_blinky} + {2'd0, eat_pinky} + {2'd0, eat_inky} + {2'd0, eat_clyde};
 
 
 wire pacman_die_collision = (
@@ -616,6 +619,41 @@ scared_goomba_sprite scared_goomba_render_inst(
     .color(scared_goomba_color)
 );
 
+wire [23:0] peach_color;
+peach_sprite peach_render_inst(
+    .x(x),
+    .y(y),
+    .active_pixels(active_pixels),
+    .peach_x_pos(pacman_x_pos),
+    .peach_y_pos(pacman_y_pos),
+    .direction(direction),
+    .anim_frame(anim_frame),
+    .color(peach_color)
+);
+
+wire [23:0] shy_guy_color;
+shy_guy_sprite shy_guy_render_inst(
+    .x(x),
+    .y(y),
+    .active_pixels(active_pixels),
+    .shy_guy_x_pos(goomba_x_pos),
+    .shy_guy_y_pos(goomba_y_pos),
+    .anim_frame(ghost_anim_frame),
+    .color(shy_guy_color)
+);
+
+//wire [23:0] scared_shy_guy_color;
+//scared_shy_guy_sprite scared_shy_guy_render_inst(
+//    .x(x),
+//    .y(y),
+//    .active_pixels(active_pixels),
+//    .shy_guy_x_pos(goomba_x_pos),
+//    .shy_guy_y_pos(goomba_y_pos),
+//    .anim_frame(ghost_anim_frame),
+//    .flash(frightened_timer < 9'd90 && super_pellet_blink_counter[3]),
+//    .color(scared_shy_guy_color)
+//);
+
 //single scared ghost shared across all 4 ghosts
 wire in_scared_blinky = blinky_is_frightened && inside_blinky_box;
 wire in_scared_pinky  = pinky_is_frightened  && inside_pinky_box;
@@ -647,35 +685,39 @@ scared_ghost_sprite scared_render_inst(
 );
 
 //final vga output mux
+wire any_easter_egg = easter_egg1_active || easter_egg2_active;
 wire player_visible = (death_timer == 7'd0) || death_timer[3];
-wire [23:0] active_player_color = easter_egg1_active ? mario_color : raw_pacman_color;
+wire [23:0] active_player_color = easter_egg1_active ? mario_color : easter_egg2_active ? peach_color : raw_pacman_color;
 wire [23:0] final_player_color  = player_visible ? active_player_color : 24'h000000;
 
-//single life_display shared across all 3 heart positions (15 wide x 16 tall)
-wire show_heart0 = ((2'd0 < lives) || (2'd0 == lives && death_timer > 7'd0)) && player_visible;
-wire show_heart1 = ((2'd1 < lives) || (2'd1 == lives && death_timer > 7'd0)) && player_visible;
-wire show_heart2 = ((2'd2 < lives) || (2'd2 == lives && death_timer > 7'd0)) && player_visible;
+wire show_heart0 = ((3'd0 < lives) || (3'd0 == lives && death_timer > 7'd0)) && player_visible;
+wire show_heart1 = ((3'd1 < lives) || (3'd1 == lives && death_timer > 7'd0)) && player_visible;
+wire show_heart2 = ((3'd2 < lives) || (3'd2 == lives && death_timer > 7'd0)) && player_visible;
+wire show_heart3 = ((3'd3 < lives) || (3'd3 == lives && death_timer > 7'd0)) && player_visible;
 
 wire in_heart_x = (x >= 10'd609) && (x < 10'd639);
 wire in_heart0  = show_heart0 && in_heart_x && (y >= 10'd420) && (y < 10'd452);
 wire in_heart1  = show_heart1 && in_heart_x && (y >= 10'd380) && (y < 10'd412);
 wire in_heart2  = show_heart2 && in_heart_x && (y >= 10'd340) && (y < 10'd372);
+wire in_heart3  = show_heart3 && in_heart_x && (y >= 10'd300) && (y < 10'd332);
 
 wire [9:0] active_heart_y = in_heart0 ? 10'd420 :
                             in_heart1 ? 10'd380 :
-                                        10'd340;
+                            in_heart2 ? 10'd340 :
+                                        10'd300;
 
 wire [23:0] lives_raw_color;
 life_display life_display_render(
     .x(x),
     .y(y),
-    .active_pixels(active_pixels && (in_heart0 || in_heart1 || in_heart2)),
+    .active_pixels(active_pixels && (in_heart0 || in_heart1 || in_heart2 || in_heart3)),
     .heart_x_pos(10'd609),
     .heart_y_pos(active_heart_y),
     .color(lives_raw_color)
 );
 
 wire [23:0] active_goomba_color = goomba_is_scared ? scared_goomba_color : goomba_color;
+wire [23:0] active_shy_guy_color = goomba_is_scared ? scared_goomba_color : shy_guy_color; // todo: use scared_shy_guy_color here once that sprite is done
 
 wire [23:0] blinky_display_color = blinky_is_frightened ? scared_raw_color : blinky_raw_color;
 wire [23:0] pinky_display_color  = pinky_is_frightened  ? scared_raw_color : pinky_raw_color;
@@ -684,20 +726,22 @@ wire [23:0] clyde_display_color  = clyde_is_frightened  ? scared_raw_color : cly
 
 wire show_pacman = player_visible && (final_player_color != 24'h000000);
 wire show_goomba = easter_egg1_active && (active_goomba_color != 24'h000000);
-wire show_blinky = !easter_egg1_active && (blinky_display_color != 24'h000000);
-wire show_pinky  = !easter_egg1_active && (pinky_display_color  != 24'h000000);
-wire show_inky   = !easter_egg1_active && (inky_display_color   != 24'h000000);
-wire show_clyde  = !easter_egg1_active && (clyde_display_color  != 24'h000000);
+wire show_shy_guy = easter_egg2_active && (active_shy_guy_color != 24'h000000);
+wire show_blinky = !any_easter_egg && (blinky_display_color != 24'h000000);
+wire show_pinky  = !any_easter_egg && (pinky_display_color  != 24'h000000);
+wire show_inky   = !any_easter_egg && (inky_display_color   != 24'h000000);
+wire show_clyde  = !any_easter_egg && (clyde_display_color  != 24'h000000);
 wire show_lives  = (lives_raw_color != 24'h000000);
 
-wire [23:0] final_vga_color = show_pacman ? final_player_color :
-                              show_goomba ? active_goomba_color :
-                              show_blinky ? blinky_display_color :
-                              show_pinky  ? pinky_display_color :
-                              show_inky   ? inky_display_color :
-                              show_clyde  ? clyde_display_color :
-                              show_lives  ? lives_raw_color :
-                                            {fb_r, fb_g, fb_b};
+wire [23:0] final_vga_color = show_pacman  ? final_player_color :
+                              show_goomba  ? active_goomba_color :
+                              show_shy_guy ? active_shy_guy_color :
+                              show_blinky  ? blinky_display_color :
+                              show_pinky   ? pinky_display_color :
+                              show_inky    ? inky_display_color :
+                              show_clyde   ? clyde_display_color :
+                              show_lives   ? lives_raw_color :
+                                             {fb_r, fb_g, fb_b};
 														  
 assign VGA_R = final_vga_color[23:16];
 assign VGA_G = final_vga_color[15:8];
@@ -830,8 +874,9 @@ begin
 		stagger_timer <= 8'd0;
 		freeze_timer <= 6'd0;
 		easter_egg1_active <= 1'b0;
+		easter_egg2_active <= 1'b0;
 		
-		lives <= 2'd3;
+		lives <= 3'd3;
 		game_over_active <= 1'b0;
 		death_timer <= 7'd0;
 		game_won_active <= 1'b0;
@@ -906,23 +951,26 @@ begin
 					end
 						
 					// pulse ghost score reg 
-					if (eat_blinky || eat_pinky || eat_inky || eat_clyde) begin
-						if (active_pellet == 1'b0) begin
-							if (pellet1_ghost_count < 13'd4) begin
-								pellet1_ghost_count <= pellet1_ghost_count + 1'b1;
-								en_pellet1 <= 1'b1;
-							end
-						end else begin
-							if (pellet2_ghost_count < 13'd4) begin
-								pellet2_ghost_count <= pellet2_ghost_count + 1'b1;
-								en_pellet2 <= 1'b1;
-							end
-						end
+					if (ghosts_eaten_now > 3'd0) begin
+						 if (active_pellet == 1'b0) begin
+							  if (pellet1_ghost_count < 13'd4) begin
+									pellet1_ghost_count <= ((pellet1_ghost_count + {10'd0, ghosts_eaten_now}) > 13'd4) ? 13'd4 : (pellet1_ghost_count + {10'd0, ghosts_eaten_now});
+									en_pellet1 <= 1'b1;
+							  end
+						 end else begin
+							  if (pellet2_ghost_count < 13'd4) begin
+									pellet2_ghost_count <= ((pellet2_ghost_count + {10'd0, ghosts_eaten_now}) > 13'd4) ? 13'd4 : (pellet2_ghost_count + {10'd0, ghosts_eaten_now});
+									en_pellet2 <= 1'b1;
+							  end
+						 end
 					end
 				
-					if ((level == 1'b0) && (pellet1_ghost_count == 13'd4 || pellet2_ghost_count == 13'd4) && (level_clear_timer == 7'd0)) begin
-						easter_egg1_active <= 1'b1; 
-					end															
+					if ((pellet1_ghost_count == 13'd4 || pellet2_ghost_count == 13'd4) && (level_clear_timer == 7'd0)) begin
+						if (level == 1'b0)
+								easter_egg1_active <= 1'b1;
+						else
+								easter_egg2_active <= 1'b1;
+						end															
 
 					if(freeze_timer > 6'd0) begin
 						freeze_timer <= freeze_timer - 1'b1; 
@@ -949,7 +997,7 @@ begin
 						if ((pellets_eaten + super_pellets_eaten) >= current_total_pellets) begin
 							if (level == 1'b0) begin
 								if (level_clear_timer == 7'd0) begin
-									level_clear_timer <= 7'd63; // walls flash white twice
+									level_clear_timer <= 7'd95;
 								end
 							end else begin
 								// win within level 2
@@ -983,9 +1031,11 @@ begin
 						end else if (level_clear_timer == 7'd1 || (SW_db[0] && !level)) begin
 							level_clear_timer <= 7'd0;
 							level <= 1'b1;
+							easter_egg2_active <= 1'b0;
 							level_transition <= 1'b1;
 							easter_egg1_active <= 1'b0;
-
+							lives <= lives + 1'b1;
+								
 							// saves score from level 1
 							saved_pellets_eaten <= pellets_eaten;
 							saved_super_pellets_eaten <= super_pellets_eaten;
@@ -1025,13 +1075,13 @@ begin
 							inky_scared <= 1'b0;
 							clyde_scared <= 1'b0;
 							  
-							if(lives == 2'd0) begin
+							if(lives == 3'd0) begin
 								game_over_active <= 1'b1; 
 							end
 						end else if (pacman_die_collision && !game_over_active) begin
 							death_timer <= 7'd120;
 							stagger_timer <= 8'd0;
-							if (lives > 2'd0) begin
+							if (lives > 3'd0) begin
 								lives <= lives - 1'b1; 
 							end 
 						end else if (started && !game_over_active) begin
@@ -1084,10 +1134,10 @@ begin
 						the_vga_draw_frame_write_mem_data <= game_won_color;
 					end else begin
 						the_vga_draw_frame_write_mem_data <= (is_gate_bar ? 24'hFFB8FF :
-																		 (is_wall_border ? wall_border_color :
-																		 (is_wall_fill ? 24'hFFB897 : 
-																		 (draw_pellet ? pellet_color :
-																		 (draw_super_pellet ? (level ? 24'hFFFFFF : 24'hFFB8AE) : 24'h000000))))); end
+                                     (is_wall_border ? wall_border_color :
+                                     (is_wall_fill ? wall_fill_color : 
+                                     (draw_pellet ? pellet_color :
+                                     (draw_super_pellet ? (level ? 24'hFFFFFF : 24'hFFB8AE) : 24'h000000))))); end
 					
 					the_vga_draw_frame_write_a_pixel <= 1'b1;
 						
