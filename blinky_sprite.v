@@ -51,8 +51,8 @@ module blinky_sprite(
             4'd11: body_row_bits = 16'b1111111111111111;
             4'd12: body_row_bits = 16'b1111111111111111;
             4'd13: body_row_bits = 16'b1111111111111111;
-            4'd14: body_row_bits = (anim_frame[0] == 1'b0) ? 16'b1111001111001111 : 16'b1111001111001111;
-            4'd15: body_row_bits = (anim_frame[0] == 1'b0) ? 16'b0110000110000110 : 16'b1111001111001111;
+            4'd14: body_row_bits = (anim_frame[0] == 1'b0) ? 16'b1111001111001111 : 16'b1001111001111001;
+            4'd15: body_row_bits = (anim_frame[0] == 1'b0) ? 16'b0110000110000110 : 16'b0000110000110000;
             default: body_row_bits = 16'b0000000000000000;
         endcase
 

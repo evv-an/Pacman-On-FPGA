@@ -2,133 +2,79 @@ module mario_sprite(
     input [9:0] x,
     input [9:0] y,
     input active_pixels,
-    input [9:0] mario_x_pos, //virtual grid x
-    input [9:0] mario_y_pos, //virtual grid y
-    input [1:0] direction, //up > down > left > right
+    input [9:0] mario_x_pos, // virtual grid x
+    input [9:0] mario_y_pos, // virtual grid y
+    input [1:0] direction,   // up > down > left > right
+    input [1:0] anim_frame,  // toggles frame 1 and frame 2
     output reg [23:0] color
 );
 
-    parameter RED = 24'hFF0000;
-    parameter BLUE = 24'h2255FF;
-    parameter YELLOW = 24'hFFFF00;
-    parameter BROWN = 24'h7A3610;
-    parameter SKIN = 24'hFFC88C;
-    parameter EYE_BLACK = 24'h010101;
-    parameter BLACK = 24'h000000;
-
-    //convert virtual coordinates to physical coordinates
+    // convert virtual coordinates to physical coordinates
     wire [9:0] mario_left = {mario_x_pos[7:0], 2'b00};
-    wire [9:0] mario_top = {mario_y_pos[7:0], 2'b00};
+    wire [9:0] mario_top  = {mario_y_pos[7:0], 2'b00};
 
-    //checks if drawing inside mario
-    wire inside_mario = active_pixels && (x >= mario_left) && (x < mario_left + 10'd32) && (y >= mario_top) && (y < mario_top + 10'd32);
+    // checks if drawing inside mario
+    wire inside_mario = active_pixels &&
+                        (x >= mario_left) && (x < mario_left + 10'd32) &&
+                        (y >= mario_top)  && (y < mario_top  + 10'd32);
 
     wire [4:0] offset_x = x - mario_left;
     wire [4:0] offset_y = y - mario_top;
     wire [3:0] sprite_x = offset_x[4:1];
     wire [3:0] sprite_y = offset_y[4:1];
 
-    //rotate coordinates 90 degrees ccw and mirror when facing left
-    wire [3:0] rotated_x = (direction == 2'b10) ? sprite_y : (4'd15 - sprite_y);
+    // rotate coordinates 90 degrees ccw, mirror when facing left
+    wire [3:0] rotated_x = (direction == 2'b01) ? sprite_y : (4'd15 - sprite_y);
     wire [3:0] rotated_y = sprite_x;
-    wire [3:0] bit_index = 4'd15 - rotated_x;
 
-    reg [15:0] red_row_bits;
-    reg [15:0] blue_row_bits;
-    reg [15:0] yellow_row_bits;
-    reg [15:0] brown_row_bits;
-    reg [15:0] skin_row_bits;
-    reg [15:0] eye_row_bits;
+    // each row is 16 pixels, 1 hex digit per pixel
+    // 0 = transparent
+    // 1 = cap and shirt (red)
+    // 2 = overalls (blue)
+    // 3 = buttons (yellow)
+    // 4 = hair, mustache, boots (brown)
+    // 5 = skin
+    // 6 = eyes (black)
+    reg [63:0] row_pixels;
 
     always @(*) begin
-        red_row_bits = 16'b0000000000000000;
-        blue_row_bits = 16'b0000000000000000;
-        yellow_row_bits = 16'b0000000000000000;
-        brown_row_bits = 16'b0000000000000000;
-        skin_row_bits = 16'b0000000000000000;
-        eye_row_bits = 16'b0000000000000000;
-
         case (rotated_y)
-            4'd0: begin
-                red_row_bits = 16'b0000111111000000;
-            end
-            4'd1: begin
-                red_row_bits = 16'b0001111111111000;
-            end
-            4'd2: begin
-                brown_row_bits = 16'b0001111000000000;
-                skin_row_bits = 16'b0000000110100000;
-                eye_row_bits = 16'b0000000001000000;
-            end
-            4'd3: begin
-                brown_row_bits = 16'b0011010000000000;
-                skin_row_bits = 16'b0000101110111000;
-                eye_row_bits = 16'b0000000001000000;
-            end
-            4'd4: begin
-                brown_row_bits = 16'b0011011000100000;
-                skin_row_bits = 16'b0000100111011100;
-            end
-            4'd5: begin
-                brown_row_bits = 16'b0011100001111000;
-                skin_row_bits = 16'b0000011110000000;
-            end
-            4'd6: begin
-                skin_row_bits = 16'b0000111111110000;
-            end
-            4'd7: begin
-                blue_row_bits = 16'b0001110111000000;
-                red_row_bits = 16'b0000001000000000;
-            end
-            4'd8: begin
-                blue_row_bits = 16'b0011110110111000;
-                red_row_bits = 16'b0000001001000000;
-            end
-            4'd9: begin
-                blue_row_bits = 16'b0111110000111100;
-                red_row_bits = 16'b0000001111000000;
-            end
-            4'd10: begin
-                skin_row_bits = 16'b0110000000001100;
-                blue_row_bits = 16'b0001100000010000;
-                red_row_bits = 16'b0000010110100000;
-                yellow_row_bits = 16'b0000001001000000;
-            end
-            4'd11: begin
-                skin_row_bits = 16'b0111000000011100;
-                red_row_bits = 16'b0000111111100000;
-            end
-            4'd12: begin
-                skin_row_bits = 16'b0110000000001100;
-                red_row_bits = 16'b0000111111100000;
-            end
-            4'd13: begin
-                red_row_bits = 16'b0001111011110000;
-            end
-            4'd14: begin
-                brown_row_bits = 16'b0011110001111000;
-            end
-            4'd15: begin
-                brown_row_bits = 16'b0111110001111100;
-            end
+            4'd0:  row_pixels = 64'h0000011111000000;
+            4'd1:  row_pixels = 64'h0000111111100000;
+            4'd2:  row_pixels = 64'h0001111111111000;
+            4'd3:  row_pixels = 64'h0011115555500000;
+            4'd4:  row_pixels = 64'h0011455556500000;
+            4'd5:  row_pixels = 64'h0045445556555000;
+            4'd6:  row_pixels = 64'h0045445445555000;
+            4'd7:  row_pixels = 64'h0004455544440000;
+            4'd8:  row_pixels = 64'h0000555555500000;
+            4'd9:  row_pixels = 64'h0000012111000000;
+            4'd10: row_pixels = 64'h0000112111200000;
+            4'd11: row_pixels = 64'h0001155311550000;
+            4'd12: row_pixels = 64'h0001555222550000;
+            4'd13: row_pixels = anim_frame[0] ? 64'h0004552222224400 : 64'h0000552222200000;
+            4'd14: row_pixels = anim_frame[0] ? 64'h0044422222244400 : 64'h0000442222440000;
+            4'd15: row_pixels = anim_frame[0] ? 64'h0444222000044000 : 64'h0000444000444000;
+            default: row_pixels = 64'h0000000000000000;
         endcase
+    end
 
-        if (!inside_mario)
-            color = BLACK;
-        else if (eye_row_bits[bit_index])
-            color = EYE_BLACK;
-        else if (yellow_row_bits[bit_index])
-            color = YELLOW;
-        else if (red_row_bits[bit_index])
-            color = RED;
-        else if (blue_row_bits[bit_index])
-            color = BLUE;
-        else if (brown_row_bits[bit_index])
-            color = BROWN;
-        else if (skin_row_bits[bit_index])
-            color = SKIN;
-        else
-            color = BLACK;
+    wire [3:0] pixel_code = row_pixels[(4'd15 - rotated_x) * 4 +: 4];
+
+    always @(*) begin
+        if (!inside_mario) begin
+            color = 24'h000000;
+        end else begin
+            case (pixel_code)
+                4'd1: color = 24'hDD362D; // red cap and shirt
+                4'd2: color = 24'h2255FF; // blue overalls
+                4'd3: color = 24'hFFFF00; // yellow buttons
+                4'd4: color = 24'h7A3610; // brown hair, mustache, boots
+                4'd5: color = 24'hFFC88C; // skin
+                4'd6: color = 24'h010101; // black eyes
+                default: color = 24'h000000;
+            endcase
+        end
     end
 
 endmodule

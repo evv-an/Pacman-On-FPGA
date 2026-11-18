@@ -27,7 +27,7 @@ module peach_sprite(
     wire [3:0] rot_y = sprite_x;
 
     // mirrors depending on which way peach is facing
-    wire [3:0] mirrored_x = (direction == 2'b10) ? (4'd15 - rot_x) : rot_x;
+    wire [3:0] mirrored_x = (direction == 2'b01) ? (4'd15 - rot_x) : rot_x;
 
     // each row is 16 pixels, 1 hex digit per pixel
     // 0 = transparent

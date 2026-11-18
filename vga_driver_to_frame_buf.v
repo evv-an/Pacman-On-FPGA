@@ -559,6 +559,7 @@ mario_sprite mario_render_inst(
     .mario_x_pos(pacman_x_pos),
     .mario_y_pos(pacman_y_pos),
     .direction(direction),
+	 .anim_frame(anim_frame),
     .color(mario_color)
 );
 
@@ -642,17 +643,17 @@ shy_guy_sprite shy_guy_render_inst(
     .color(shy_guy_color)
 );
 
-//wire [23:0] scared_shy_guy_color;
-//scared_shy_guy_sprite scared_shy_guy_render_inst(
-//    .x(x),
-//    .y(y),
-//    .active_pixels(active_pixels),
-//    .shy_guy_x_pos(goomba_x_pos),
-//    .shy_guy_y_pos(goomba_y_pos),
-//    .anim_frame(ghost_anim_frame),
-//    .flash(frightened_timer < 9'd90 && super_pellet_blink_counter[3]),
-//    .color(scared_shy_guy_color)
-//);
+wire [23:0] scared_shy_guy_color;
+scared_shy_guy_sprite scared_shy_guy_render_inst(
+    .x(x),
+    .y(y),
+    .active_pixels(active_pixels),
+    .shy_guy_x_pos(goomba_x_pos),
+    .shy_guy_y_pos(goomba_y_pos),
+    .anim_frame(ghost_anim_frame),
+    .flash(frightened_timer < 9'd90 && super_pellet_blink_counter[3]),
+    .color(scared_shy_guy_color)
+);
 
 //single scared ghost shared across all 4 ghosts
 wire in_scared_blinky = blinky_is_frightened && inside_blinky_box;
@@ -717,7 +718,7 @@ life_display life_display_render(
 );
 
 wire [23:0] active_goomba_color = goomba_is_scared ? scared_goomba_color : goomba_color;
-wire [23:0] active_shy_guy_color = goomba_is_scared ? scared_goomba_color : shy_guy_color; // todo: use scared_shy_guy_color here once that sprite is done
+wire [23:0] active_shy_guy_color = goomba_is_scared ? scared_shy_guy_color : shy_guy_color;
 
 wire [23:0] blinky_display_color = blinky_is_frightened ? scared_raw_color : blinky_raw_color;
 wire [23:0] pinky_display_color  = pinky_is_frightened  ? scared_raw_color : pinky_raw_color;
@@ -821,7 +822,7 @@ end
 
 always @(*) begin
 	case (S)
-		START:     NS = CLEAR;
+		START:     NS = SW_db[9] ? CLEAR : START;
 		CLEAR:     NS = (idx_location == 15'd19199) ? DRAW_WALL : CLEAR;
 		WAIT:      NS = SYNC_LOW;
 		SYNC_LOW:  NS = (VGA_VS == 1'b0) ? MOVE : SYNC_LOW;
