@@ -697,15 +697,15 @@ wire show_heart2 = ((3'd2 < lives) || (3'd2 == lives && death_timer > 7'd0)) && 
 wire show_heart3 = ((3'd3 < lives) || (3'd3 == lives && death_timer > 7'd0)) && player_visible;
 
 wire in_heart_x = (x >= 10'd609) && (x < 10'd639);
-wire in_heart0  = show_heart0 && in_heart_x && (y >= 10'd420) && (y < 10'd452);
-wire in_heart1  = show_heart1 && in_heart_x && (y >= 10'd380) && (y < 10'd412);
-wire in_heart2  = show_heart2 && in_heart_x && (y >= 10'd340) && (y < 10'd372);
-wire in_heart3  = show_heart3 && in_heart_x && (y >= 10'd300) && (y < 10'd332);
+wire in_heart0  = show_heart0 && in_heart_x && (y >= 10'd424) && (y < 10'd446);
+wire in_heart1  = show_heart1 && in_heart_x && (y >= 10'd398) && (y < 10'd420);
+wire in_heart2  = show_heart2 && in_heart_x && (y >= 10'd372) && (y < 10'd394);
+wire in_heart3  = show_heart3 && in_heart_x && (y >= 10'd346) && (y < 10'd368);
 
 wire [9:0] active_heart_y = in_heart0 ? 10'd420 :
-                            in_heart1 ? 10'd380 :
-                            in_heart2 ? 10'd340 :
-                                        10'd300;
+                            in_heart1 ? 10'd394 :
+                            in_heart2 ? 10'd368 :
+                                        10'd342;
 
 wire [23:0] lives_raw_color;
 life_display life_display_render(

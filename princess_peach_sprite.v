@@ -2,18 +2,24 @@ module peach_sprite(
     input [9:0] x,
     input [9:0] y,
     input active_pixels,
-    input [9:0] peach_x_pos,  // virtual grid x
-    input [9:0] peach_y_pos,  // virtual grid y
-    input [1:0] direction,    // up > down > left > right
-    input [1:0] anim_frame,   // toggles frame 1 and frame 2
+    input [9:0] peach_x_pos,
+    input [9:0] peach_y_pos,
+    input [1:0] direction,
+    input [1:0] anim_frame,
     output reg [23:0] color
 );
 
-    // convert virtual coordinates to physical coordinates
+    parameter YELLOW    = 24'hFFFE88;
+    parameter BLUE      = 24'h56BDF7;
+    parameter PINK_TRIM = 24'hEB33B9;
+    parameter HAIR      = 24'hFBE35D;
+    parameter SKIN      = 24'hFBE6BB;
+    parameter DRESS     = 24'hF4B5FB;
+    parameter BLACK     = 24'h000000;
+
     wire [9:0] peach_left = {peach_x_pos[7:0], 2'b00};
     wire [9:0] peach_top  = {peach_y_pos[7:0], 2'b00};
 
-    // checks if drawing inside peach
     wire inside_peach = active_pixels &&
                         (x >= peach_left) && (x < peach_left + 10'd32) &&
                         (y >= peach_top)  && (y < peach_top  + 10'd32);
@@ -26,57 +32,110 @@ module peach_sprite(
     wire [3:0] rot_x = 4'd15 - sprite_y;
     wire [3:0] rot_y = sprite_x;
 
-    // mirrors depending on which way peach is facing
     wire [3:0] mirrored_x = (direction == 2'b01) ? (4'd15 - rot_x) : rot_x;
+    wire [3:0] bit_index  = 4'd15 - mirrored_x;
 
-    // each row is 16 pixels, 1 hex digit per pixel
-    // 0 = transparent
-    // 1 = crown and brooch (light yellow)
-    // 2 = jewel, eyes, earrings (cyan)
-    // 3 = collar and dark dress (hot pink)
-    // 4 = hair (gold)
-    // 5 = skin
-    // 6 = dress (light pink)
-    reg [63:0] row_pixels;
+    reg [15:0] yellow_row_bits;
+    reg [15:0] blue_row_bits;
+    reg [15:0] pink_trim_row_bits;
+    reg [15:0] hair_row_bits;
+    reg [15:0] skin_row_bits;
+    reg [15:0] dress_row_bits;
 
     always @(*) begin
+        yellow_row_bits    = 16'b0000000000000000;
+        blue_row_bits      = 16'b0000000000000000;
+        pink_trim_row_bits = 16'b0000000000000000;
+        hair_row_bits      = 16'b0000000000000000;
+        skin_row_bits      = 16'b0000000000000000;
+        dress_row_bits     = 16'b0000000000000000;
+
         case (rot_y)
-            4'd0:  row_pixels = 64'h0000001010100000;
-            4'd1:  row_pixels = 64'h0000002131200000;
-            4'd2:  row_pixels = 64'h0000044444440000;
-            4'd3:  row_pixels = 64'h0000444444444000;
-            4'd4:  row_pixels = 64'h0044444444444400;
-            4'd5:  row_pixels = 64'h0004444544544400;
-            4'd6:  row_pixels = 64'h0000454255254000;
-            4'd7:  row_pixels = 64'h0004424555554400;
-            4'd8:  row_pixels = 64'h0444446331364440;
-            4'd9:  row_pixels = 64'h0044466612166400;
-            4'd10: row_pixels = 64'h0444446666664400;
-            4'd11: row_pixels = 64'h0444440333304400;
-            4'd12: row_pixels = anim_frame[0] ? 64'h0044433336334400 : 64'h0044443336334400;
-            4'd13: row_pixels = anim_frame[0] ? 64'h0004333366334000 : 64'h0004466366633600;
-            4'd14: row_pixels = anim_frame[0] ? 64'h0066666666660000 : 64'h0000666666666600;
-            4'd15: row_pixels = anim_frame[0] ? 64'h0033333333330000 : 64'h0000333333333300;
-            default: row_pixels = 64'h0000000000000000;
+            4'd0: begin
+                yellow_row_bits    = 16'b0000001010100000;
+            end
+            4'd1: begin
+                yellow_row_bits    = 16'b0000000101000000;
+                blue_row_bits      = 16'b0000001000100000;
+                pink_trim_row_bits = 16'b0000000010000000;
+            end
+            4'd2: begin
+                hair_row_bits      = 16'b0000011111110000;
+            end
+            4'd3: begin
+                hair_row_bits      = 16'b0000111111111000;
+            end
+            4'd4: begin
+                hair_row_bits      = 16'b0011111111111100;
+            end
+            4'd5: begin
+                hair_row_bits      = 16'b0001111011011100;
+                skin_row_bits      = 16'b0000000100100000;
+            end
+            4'd6: begin
+                blue_row_bits      = 16'b0000000100100000;
+                hair_row_bits      = 16'b0000101000001000;
+                skin_row_bits      = 16'b0000010011010000;
+            end
+            4'd7: begin
+                blue_row_bits      = 16'b0000010000000000;
+                hair_row_bits      = 16'b0001101000001100;
+                skin_row_bits      = 16'b0000000111110000;
+            end
+            4'd8: begin
+                yellow_row_bits    = 16'b0000000001000000;
+                pink_trim_row_bits = 16'b0000000110100000;
+                hair_row_bits      = 16'b0111110000001110;
+                dress_row_bits     = 16'b0000001000010000;
+            end
+            4'd9: begin
+                yellow_row_bits    = 16'b0000000010100000;
+                blue_row_bits      = 16'b0000000001000000;
+                hair_row_bits      = 16'b0011100000000100;
+                dress_row_bits     = 16'b0000011100011000;
+            end
+            4'd10: begin
+                hair_row_bits      = 16'b0111110000001100;
+                dress_row_bits     = 16'b0000001111110000;
+            end
+            4'd11: begin
+                pink_trim_row_bits = 16'b0000000111100000;
+                hair_row_bits      = 16'b0111110000001100;
+            end
+            4'd12: begin
+                pink_trim_row_bits = anim_frame[0] ? 16'b0000011110110000 : 16'b0000001110110000;
+                hair_row_bits      = anim_frame[0] ? 16'b0011100000001100 : 16'b0011110000001100;
+                dress_row_bits     = 16'b0000000001000000;
+            end
+            4'd13: begin
+                pink_trim_row_bits = anim_frame[0] ? 16'b0000111100110000 : 16'b0000000100011000;
+                hair_row_bits      = anim_frame[0] ? 16'b0001000000001000 : 16'b0001100000000000;
+                dress_row_bits     = anim_frame[0] ? 16'b0000000011000000 : 16'b0000011011100100;
+            end
+            4'd14: begin
+                dress_row_bits     = anim_frame[0] ? 16'b0011111111110000 : 16'b0000111111111100;
+            end
+            4'd15: begin
+                pink_trim_row_bits = anim_frame[0] ? 16'b0011111111110000 : 16'b0000111111111100;
+            end
         endcase
-    end
 
-    wire [3:0] pixel_code = row_pixels[(4'd15 - mirrored_x) * 4 +: 4];
-
-    always @(*) begin
-        if (!inside_peach) begin
-            color = 24'h000000;
-        end else begin
-            case (pixel_code)
-                4'd1: color = 24'hFFFE88; // crown / brooch yellow
-                4'd2: color = 24'h56BDF7; // eyes / jewels / earring blue
-                4'd3: color = 24'hEB33B9; // hot pink collar & trim
-                4'd4: color = 24'hFBE35D; // golden hair
-                4'd5: color = 24'hFBE6BB; // skin
-                4'd6: color = 24'hF4B5FB; // light pink dress
-                default: color = 24'h000000;
-            endcase
-        end
+        if (!inside_peach)
+            color = BLACK;
+        else if (yellow_row_bits[bit_index])
+            color = YELLOW;
+        else if (blue_row_bits[bit_index])
+            color = BLUE;
+        else if (pink_trim_row_bits[bit_index])
+            color = PINK_TRIM;
+        else if (hair_row_bits[bit_index])
+            color = HAIR;
+        else if (skin_row_bits[bit_index])
+            color = SKIN;
+        else if (dress_row_bits[bit_index])
+            color = DRESS;
+        else
+            color = BLACK;
     end
 
 endmodule
