@@ -28,7 +28,7 @@ SW9 turns the game on and resets it. KEY0/KEY3/KEY1/KEY2 move up/down/left/right
 
 ## Build
 
-Open `vga_driver_to_frame_buf.qpf` in Quartus Prime Lite 23.1, compile, and program the `.sof` onto the board. Every version is tagged, and its build is on the [Releases](../../releases) page.
+Open `vga_driver_to_frame_buf.qpf` in Quartus Prime Lite 23.1, compile, and program the `.sof` onto the board. Every version is tagged on the [Releases](../../releases) page, and the latest release includes a ready-to-program `.sof`.
 
 ## Team
 
