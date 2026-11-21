@@ -24,7 +24,17 @@ Each ghost runs its own copy of `ghost_controller.v`. At the center of every til
 
 ## Controls
 
-SW9 turns the game on and resets it. KEY0/KEY3/KEY1/KEY2 move up/down/left/right, or use a joystick on GPIO_0[3:0] (through an Arduino). SW0 skips to level 2. The score shows on HEX4–HEX0.
+SW9 turns the game on and resets it. KEY0/KEY3/KEY1/KEY2 move up/down/left/right, or use the joystick. SW0 skips to level 2. The score shows on HEX4–HEX0.
+
+**Joystick:** an analog thumbstick is read by an Arduino running [`joystick_to_fpga.ino`](arduino/joystick_to_fpga/joystick_to_fpga.ino), which turns it into four active-low direction signals. It calibrates the stick's center at startup and uses a deadzone with hysteresis so only one direction is ever active.
+
+| Joystick | Arduino | FPGA |
+|---|---|---|
+| VRx / VRy | A0 / A1 | |
+| | pins 4 / 5 / 6 / 7 (up / down / left / right) | GPIO_0[0] / [1] / [2] / [3] |
+| GND | GND | GND |
+
+The DE1-SoC's GPIO pins are 3.3 V, so a 5 V Arduino's outputs need level shifting before they reach the board.
 
 ## Build
 
@@ -37,5 +47,5 @@ Evan Sabol and Ash Carr
 ## Acknowledgments
 
 - The original VGA and frame-buffer code is course starter code by Dr. Peter Jamieson.
-- Google Gemini helped with debugging and with repetitive work, like instantiating modules and repeating logic we'd already written for each ghost and sprite. Claude (Anthropic) helped write this README.
+- Google Gemini helped with debugging and with repetitive work, like instantiating modules and repeating logic we'd already written for each ghost and sprite. The Arduino joystick code was generated with Google Gemini. Claude (Anthropic) helped write this README.
 - This is a fan project, not affiliated with Bandai Namco or Nintendo.
