@@ -34,7 +34,7 @@ SW9 turns the game on and resets it. KEY0/KEY3/KEY1/KEY2 move up/down/left/right
 | | pins 4 / 5 / 6 / 7 (up / down / left / right) | GPIO_0[0] / [1] / [2] / [3] |
 | GND | GND | GND |
 
-The DE1-SoC's GPIO pins are 3.3 V, so a 5 V Arduino's outputs need level shifting before they reach the board.
+The Arduino's 5 V outputs go through resistor voltage dividers on a breadboard to bring them down to the DE1-SoC's 3.3 V GPIO.
 
 ## Build
 
